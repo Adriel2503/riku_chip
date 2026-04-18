@@ -959,3 +959,4 @@ build_artifacts = ["*.gds"]     # si .mag es la fuente
 - [../herramientas/headless_y_compatibilidad_herramientas.md](../herramientas/headless_y_compatibilidad_herramientas.md) — cómo los drivers detectan herramientas instaladas
 - [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — subsistema de merge
 - [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — subsistema de CI
+- [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — estrategia de caché para stages costosos de `miku ci`

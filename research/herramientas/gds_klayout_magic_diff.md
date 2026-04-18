@@ -406,3 +406,5 @@ commit B (.gds) ┘ → strmcmp → texto legible (stdout)
 - [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — flags headless de KLayout y Magic
 - [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — uso de KLayout DRC en CI
 - [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — performance del XOR geométrico
+- [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — merge de .mag y conflictos de timestamp
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — detección de tipo de archivo por magic bytes y registro de drivers

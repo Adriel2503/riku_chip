@@ -297,3 +297,5 @@ Si la topología es la misma pero cambiaron valores de componentes, Netgen lo re
 - [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — waveform regression y LVS en CI
 - [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — manejo de .spice derivados en merge
 - [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — NGSpice en modo batch
+- [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — benchmarks de simulación y estrategia de caché para runs costosos
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — detección de .spice/.cir/.net y registro de diff drivers

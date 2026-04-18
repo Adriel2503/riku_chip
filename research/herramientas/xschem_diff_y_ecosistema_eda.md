@@ -183,3 +183,5 @@ Donde `miku-xschem-diff.sh` llama a Xschem headless + ImageMagick o genera un SV
 - [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — Xschem sin X11
 - [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — merge de .sch
 - [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — exportación de netlist desde Xschem en CI
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — detección de .sch por cadena `xschem version=` y registro de driver
+- [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — almacenamiento de artefactos SVG/PNG en caché de artefactos

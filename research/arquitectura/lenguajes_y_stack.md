@@ -201,3 +201,5 @@ No es mainstream todavía, pero la dirección es clara para los próximos 5 año
 ### Ver también
 - [arquitectura_cli_y_orquestacion.md](arquitectura_cli_y_orquestacion.md) — cómo el stack se traduce en componentes
 - [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — justificación de Rust para streaming GDS
+- [../herramientas/gds_klayout_magic_diff.md](../herramientas/gds_klayout_magic_diff.md) — disponibilidad de klayout.lay según paquete (PyPI vs sistema)
+- [../herramientas/headless_y_compatibilidad_herramientas.md](../herramientas/headless_y_compatibilidad_herramientas.md) — dependencias Docker por herramienta y tamaños de imagen

@@ -761,15 +761,24 @@ def get_klayout_buddies_path() -> str | None:
 - **Repo**: https://github.com/KLayout/klayout
 - **klayout PyPI** (sin GUI): https://pypi.org/project/klayout/
 - **Flags de línea de comandos**: https://www.klayout.de/doc/manual/klayout_ref.html
-- **Distinción `klayout.db` vs `klayout.lay`**: documentado en la wiki del repo
+- **Python API (`klayout.db`)**: https://www.klayout.de/doc/code/index.html
+- **DRC scripting**: https://www.klayout.de/doc/manual/drc_ref.html
+- **Distinción `klayout.db` vs `klayout.lay`**: https://www.klayout.de/doc/manual/python.html
 
 ### Xschem headless
 - **Repo**: https://github.com/StefanSchippers/xschem
 - **CHANGELOG con `--no_x`**: https://github.com/StefanSchippers/xschem/blob/master/CHANGELOG
+- **Documentación oficial**: https://xschem.sourceforge.io/stefan/pg_Installation.html
 - **Problema de xschemrc en CI**: issue tracker del repo de Xschem
+
+### NGSpice headless
+- **Repo** (mirror GitHub): https://github.com/ngspice/ngspice
+- **Manual oficial (PDF)**: http://ngspice.sourceforge.net/docs/ngspice-manual.pdf — batch mode en sección 17, `.meas` en sección de análisis de salida
+- **Sourceforge (releases oficiales)**: https://sourceforge.net/projects/ngspice/
 
 ### Magic headless
 - **Repo**: https://github.com/RTimothyEdwards/magic
+- **Documentación general**: http://opencircuitdesign.com/magic/
 - **Modo batch `-dnull`**: documentado en `magic(1)` man page y tutoriales
 - **Tutorial extracción batch**: http://opencircuitdesign.com/magic/tutorials/tut8.html
 
@@ -779,9 +788,9 @@ def get_klayout_buddies_path() -> str | None:
 - **efabless CI**: https://github.com/efabless/caravel_user_project — ejemplo real de CI con DRC/LVS
 
 ### Xvfb y rendering offscreen
-- **Xvfb**: incluido en `xvfb` package en Debian/Ubuntu
-- **`xvfb-run`**: wrapper conveniente disponible en `x11-utils`
-- **Qt offscreen**: `QT_QPA_PLATFORM=offscreen` — documentado en Qt docs
+- **Xvfb man page**: https://www.x.org/releases/current/doc/man/man1/Xvfb.1.xhtml
+- **`xvfb-run`**: wrapper conveniente disponible en `x11-utils` — `man xvfb-run`
+- **Qt offscreen platform plugin**: https://doc.qt.io/qt-6/qpa.html — `QT_QPA_PLATFORM=offscreen`
 
 ### Ver también
 - [gds_klayout_magic_diff.md](gds_klayout_magic_diff.md) — operaciones específicas de KLayout y Magic

@@ -781,3 +781,5 @@ LFS y el merge driver de Miku son compatibles. Cuando Git invoca el merge driver
 - [../herramientas/xschem_diff_y_ecosistema_eda.md](../herramientas/xschem_diff_y_ecosistema_eda.md) — formato .sch y merge de componentes
 - [../herramientas/ngspice_diff_y_versionado.md](../herramientas/ngspice_diff_y_versionado.md) — .spice como derivado regenerable
 - [ci_drc_lvs_regresiones.md](ci_drc_lvs_regresiones.md) — verificación post-merge con DRC/LVS
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — cómo `miku merge` despacha a los drivers por tipo de archivo
+- [../herramientas/headless_y_compatibilidad_herramientas.md](../herramientas/headless_y_compatibilidad_herramientas.md) — invocación de Magic y Xschem durante resolución de conflictos

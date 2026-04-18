@@ -723,3 +723,5 @@ Siguiendo la prioridad del proyecto (invertir más trabajo si mejora la UX), las
 - [../arquitectura/lenguajes_y_stack.md](../arquitectura/lenguajes_y_stack.md) — justificación de Rust para streaming
 - [ci_drc_lvs_regresiones.md](ci_drc_lvs_regresiones.md) — integración de caché en pipelines CI
 - [../herramientas/gds_klayout_magic_diff.md](../herramientas/gds_klayout_magic_diff.md) — operaciones que se cachean (XOR, DRC)
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — diseño de `miku ci` y cómo los stages invocan el sistema de caché
+- [estrategia_merge_archivos_mixtos.md](estrategia_merge_archivos_mixtos.md) — deps.toml como fuente de invalidación por dependencias cruzadas

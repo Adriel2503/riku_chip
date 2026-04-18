@@ -1106,3 +1106,4 @@ de Sky130A/GF180MCU con hash verificable — garantiza reproducibilidad entre ru
 - [../herramientas/ngspice_diff_y_versionado.md](../herramientas/ngspice_diff_y_versionado.md) — formatos de salida de NGSpice
 - [../herramientas/headless_y_compatibilidad_herramientas.md](../herramientas/headless_y_compatibilidad_herramientas.md) — ejecutar herramientas sin display
 - [cache_y_rendimiento.md](cache_y_rendimiento.md) — estrategia de caché para checks costosos
+- [../arquitectura/arquitectura_cli_y_orquestacion.md](../arquitectura/arquitectura_cli_y_orquestacion.md) — diseño de comandos `miku ci` y formato de reporte de resultados
