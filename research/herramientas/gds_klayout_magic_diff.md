@@ -372,3 +372,37 @@ commit B (.gds) ┘ → strmcmp → texto legible (stdout)
 5. **Ninguna de estas integraciones existe publicada** como git driver. Miku cubriría un gap real en los tres casos: `.sch` (Xschem), `.mag` (Magic), `.gds` (KLayout).
 
 6. **El flujo de visualización más viable para CI:** `.mag` → `magic -dnull` → `.gds` → `klayout -b XOR` → `.gds con diferencias` → `klayout -zz render` → PNG.
+
+---
+
+## Referencias
+
+### KLayout
+- **Repo oficial**: https://github.com/KLayout/klayout
+- **Documentación Python API (klayout.db)**: https://www.klayout.de/doc/code/index.html
+- **klayout en PyPI**: https://pypi.org/project/klayout/ — `pip install klayout` (sin GUI, solo DB)
+- **Script DRC de ejemplo (SKY130)**: https://github.com/google/skywater-pdk/tree/main/libraries — buscar archivos `.lydrc`
+- **KLayout DRC scripting**: https://www.klayout.de/doc/manual/drc_ref.html
+- **strmcmp / strmxor (buddy tools)**: incluidos en instalación oficial de KLayout
+
+### Magic VLSI
+- **Repo oficial**: https://github.com/RTimothyEdwards/magic
+- **Documentación**: http://opencircuitdesign.com/magic/
+- **Tutorial de extracción de netlist**: http://opencircuitdesign.com/magic/tutorials/tut8.html
+- **Magic con SKY130**: https://github.com/RTimothyEdwards/open_pdks
+
+### Librerías GDS alternativas
+- **gdstk**: https://github.com/heitzmann/gdstk — C++ con bindings Python, más rápido que gdspy
+- **gdspy**: https://github.com/heitzmann/gdspy — precursora, ampliamente usada
+- **lytest**: https://github.com/atait/lytest — framework de regresión para layouts GDS
+- **GDSFactory**: https://github.com/gdsfactory/gdsfactory — diseño de chips fotónicos y CMOS
+
+### PDKs de referencia (para pruebas)
+- **SKY130 PDK**: https://github.com/google/skywater-pdk
+- **GF180MCU PDK**: https://github.com/google/gf180mcu-pdk
+- **IHP SG13G2**: https://github.com/IHP-GmbH/IHP-Open-PDK
+
+### Ver también
+- [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — flags headless de KLayout y Magic
+- [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — uso de KLayout DRC en CI
+- [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — performance del XOR geométrico

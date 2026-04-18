@@ -155,3 +155,31 @@ Donde `miku-xschem-diff.sh` llama a Xschem headless + ImageMagick o genera un SV
 4. **El git diff driver para `.sch` es el aporte concreto que Miku puede publicar** — nadie lo ha hecho todavía para Xschem.
 
 5. **Para GDS el problema es más duro** (binario) → ver investigación de KLayout.
+
+---
+
+## Referencias
+
+### Xschem
+- **Repo oficial**: https://github.com/StefanSchippers/xschem
+- **Documentación**: https://xschem.sourceforge.io/stefan/xschem_man/xschem_man.html
+- **Flags headless (`--no_x`, `--svg`, `--png`)**: sección "Command line options" de la documentación
+- **Flag `--diff`** (v3.4.0+): https://github.com/StefanSchippers/xschem/blob/master/CHANGELOG
+
+### Herramientas de diff visual para esquemáticos
+- **plotgitsch** (KiCad): https://github.com/jnavila/plotkicadsch — referencia de arquitectura para Miku
+- **KiRI**: https://github.com/leoheck/kiri — diff web para KiCad, modelo de UX a seguir
+- **CADLAB.io**: https://cadlab.io — plataforma propietaria con diff visual para KiCad/Eagle
+
+### Ecosistema EDA open-source relacionado
+- **IIC-OSIC-TOOLS**: https://github.com/iic-jku/iic-osic-tools — entorno Docker con todas las herramientas EDA
+- **OpenLane**: https://github.com/The-OpenROAD-Project/OpenLane — flujo RTL-to-GDS automatizado
+- **OpenROAD**: https://github.com/The-OpenROAD-Project/OpenROAD — herramientas de síntesis y P&R
+
+### Formato .sch — especificación informal
+- No hay spec formal; la mejor referencia es el código fuente de Xschem y los archivos de ejemplo incluidos en el repo.
+
+### Ver también
+- [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — Xschem sin X11
+- [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — merge de .sch
+- [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — exportación de netlist desde Xschem en CI

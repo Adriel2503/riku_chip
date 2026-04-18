@@ -268,3 +268,32 @@ Si la topología es la misma pero cambiaron valores de componentes, Netgen lo re
 5. **`spicelib`** es la librería más madura para la capa de integración de Miku con NGSpice: maneja lectura/escritura de netlists, ejecución batch, y parseo de `.raw`.
 
 6. **El JSON de Netgen** es la clave para diff estructural de netlists — Miku puede invocar Netgen entre dos commits y exponer su output de forma legible en un PR.
+
+---
+
+## Referencias
+
+### NGSpice
+- **Repo oficial**: https://sourceforge.net/projects/ngspice/ (mirror en GitHub: https://github.com/ngspice/ngspice)
+- **Documentación**: http://ngspice.sourceforge.net/docs/ngspice-manual.pdf
+- **Modo batch y `.meas`**: sección 17 del manual oficial
+- **Formato `.raw`**: sección de análisis de salida en el manual
+
+### Librerías de parse y análisis
+- **spicelib**: https://github.com/nunobrum/spicelib — parse de netlists y `.raw`, reemplaza a ltspice_utils
+- **spyci**: https://github.com/gmagno/spyci — parse de `.raw` de NGSpice en Python
+- **PySpice**: https://github.com/FabriceSalvaire/PySpice — generación de netlists y simulación programática
+
+### Netgen (LVS)
+- **Repo oficial**: https://github.com/RTimothyEdwards/netgen
+- **Documentación**: http://opencircuitdesign.com/netgen/
+- **Setup SKY130 para Netgen**: incluido en open_pdks — `sky130A_setup.tcl`
+- **open_pdks**: https://github.com/RTimothyEdwards/open_pdks
+
+### Comparación de netlists (herramientas alternativas)
+- No existe un equivalente open-source maduro a `klayout --diff` para SPICE. Gap documentado.
+
+### Ver también
+- [../operaciones/ci_drc_lvs_regresiones.md](../operaciones/ci_drc_lvs_regresiones.md) — waveform regression y LVS en CI
+- [../operaciones/estrategia_merge_archivos_mixtos.md](../operaciones/estrategia_merge_archivos_mixtos.md) — manejo de .spice derivados en merge
+- [headless_y_compatibilidad_herramientas.md](headless_y_compatibilidad_herramientas.md) — NGSpice en modo batch

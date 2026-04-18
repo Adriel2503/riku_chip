@@ -149,6 +149,23 @@ El patrón más sólido para Miku es el mismo que usa gdstk:
 
 ---
 
+## ¿Cuándo refutar estas decisiones?
+
+**"Python para el MVP"** deja de ser válido si:
+- Un diff de GDS de tamaño realista (>200 MB) tarda más de 30 segundos con `klayout.db` en Python — ese tiempo rompe la UX de uso interactivo y justifica mover antes a Rust.
+- `klayout.db` via PyPI tiene un bug crítico que no se resuelve en la versión pip (ha pasado antes: algunas operaciones de `LayoutDiff` solo funcionan en la versión del sistema).
+
+**"Rust solo para streaming GDS"** deja de ser válido si:
+- Se necesita parsear `.raw` de NGSpice de varios GB con baja latencia — `spicelib` carga el archivo completo en memoria.
+- El diff de netlist SPICE necesita ser más rápido de lo que Python permite para casos con miles de subcircuitos.
+
+**"gdstk sobre gdspy"** deja de ser válido si:
+- gdstk no mantiene compatibilidad con alguna variante de GDS que usen los PDKs objetivo (GF180, IHP). gdspy tiene más años de campo.
+
+**"Rust se mueve hacia EDA"** no es una decisión — es contexto. No actuar sobre esto hasta tener una razón de rendimiento concreta.
+
+---
+
 ## 5. Contexto de la comunidad EDA
 
 La comunidad EDA open source se está moviendo hacia Rust para infraestructura nueva:
@@ -158,3 +175,29 @@ La comunidad EDA open source se está moviendo hacia Rust para infraestructura n
 - Artículo "EDA Needs to be Using Rust" (Jason McCampbell) argumentando que Rust resuelve los tres problemas históricos del C++ en EDA: rendimiento, uso de memoria y memory safety
 
 No es mainstream todavía, pero la dirección es clara para los próximos 5 años.
+
+---
+
+## Referencias
+
+### Librerías Python para EDA
+- **klayout** (Python API): https://github.com/KLayout/klayout — `pip install klayout` da acceso a `klayout.db` sin display
+- **gdstk**: https://github.com/heitzmann/gdstk — alternativa a gdspy, más rápida, escrita en C++
+- **gdspy**: https://github.com/heitzmann/gdspy — precursora de gdstk, aún usada en muchos repos
+- **spicelib**: https://github.com/nunobrum/spicelib — parse de netlists SPICE y archivos `.raw` de NGSpice
+- **PySpice**: https://github.com/FabriceSalvaire/PySpice — generación programática de netlists
+- **pygit2**: https://github.com/libgit2/pygit2 — bindings Python para libgit2, acceso a objetos git
+
+### Librerías Rust para EDA
+- **gds21**: https://github.com/dan-fritchman/Layout21/tree/main/gds21 — parser/writer GDS en Rust puro
+- **Layout21**: https://github.com/dan-fritchman/Layout21 — framework de layout en Rust (incluye gds21, lef21)
+- **git2-rs**: https://github.com/rust-lang/git2-rs — bindings Rust para libgit2
+- **substrate2**: https://github.com/substrate-labs/substrate2 — framework EDA moderno en Rust (OSRE)
+
+### Contexto de adopción Rust en EDA
+- **OSRE (Open Source Rust EDA)**: https://github.com/osre-eda — organización de herramientas EDA en Rust
+- Presentación "Rust in EDA" en ORConf 2023: buscar en https://orconf.org/
+
+### Ver también
+- [arquitectura_cli_y_orquestacion.md](arquitectura_cli_y_orquestacion.md) — cómo el stack se traduce en componentes
+- [../operaciones/cache_y_rendimiento.md](../operaciones/cache_y_rendimiento.md) — justificación de Rust para streaming GDS
