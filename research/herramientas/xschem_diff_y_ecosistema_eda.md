@@ -1,4 +1,4 @@
-# Xschem Diff y Ecosistema EDA — Investigación para Miku
+# Xschem Diff y Ecosistema EDA — Investigación para Riku
 
 ## 1. Formato `.sch` de Xschem
 
@@ -69,12 +69,12 @@ No existe ninguna herramienta externa que soporte el formato `.sch` de Xschem es
 - Diff visual para KiCad `.sch` almacenados en git
 - Dos modos: (a) diff de bitmaps, (b) diff vectorial → SVG con adiciones en verde y eliminaciones en rojo
 - Funciona como git difftool driver
-- **Relevancia para Miku:** misma arquitectura aplicable a Xschem
+- **Relevancia para Riku:** misma arquitectura aplicable a Xschem
 - [github.com/jnavila/plotkicadsch](https://github.com/jnavila/plotkicadsch)
 
 ### KiRI (KiCad Review Inspector)
 - Exporta ambas revisiones como SVG con `kicad-cli`, las compara en una interfaz web side-by-side
-- **Relevancia para Miku:** Xschem tiene `xschem -q --svg` headless — el mismo patrón es directamente replicable
+- **Relevancia para Riku:** Xschem tiene `xschem -q --svg` headless — el mismo patrón es directamente replicable
 - [github.com/leoheck/kiri](https://github.com/leoheck/kiri)
 
 ### CADLAB.io
@@ -111,7 +111,7 @@ xschem --diff rev_anterior.sch rev_actual.sch                 # diff visual en G
 
 ## 5. Git diff driver para Xschem (gap actual)
 
-**No existe un driver publicado por la comunidad.** Es un gap que Miku puede cubrir.
+**No existe un driver publicado por la comunidad.** Es un gap que Riku puede cubrir.
 
 Configuración base:
 
@@ -124,7 +124,7 @@ Configuración base:
     command = miku-xschem-diff.sh
 ```
 
-Donde `miku-xschem-diff.sh` llama a Xschem headless + ImageMagick o genera un SVG pair para el viewer de Miku.
+Donde `miku-xschem-diff.sh` llama a Xschem headless + ImageMagick o genera un SVG pair para el viewer de Riku.
 
 ---
 
@@ -137,22 +137,22 @@ Donde `miku-xschem-diff.sh` llama a Xschem headless + ImageMagick o genera un SV
 | **KiRI** | KiCad .sch | Sí (web, side-by-side) | Sí | Activo |
 | **CADLAB.io** | KiCad/Eagle/Altium | Sí (web) | Sí (GitHub/GitLab) | Comercial |
 | **ImageMagick** | Cualquiera (necesita PNG) | Sí (raster) | Via git hooks | Setup manual |
-| **Driver git para Xschem** | Xschem .sch | Posible | No publicado | **Gap de Miku** |
+| **Driver git para Xschem** | Xschem .sch | Posible | No publicado | **Gap de Riku** |
 
 ---
 
-## 7. Conclusiones para Miku
+## 7. Conclusiones para Riku
 
 1. **El texto plano de Xschem ya funciona con `git diff`** — no hay que hacer nada para el diff básico. Es una ventaja sobre GDS.
 
-2. **Xschem ya tiene diff visual nativo** (`--diff` y `Alt-x`). Miku podría simplemente invocar esto o wrapearlo, en lugar de construirlo desde cero.
+2. **Xschem ya tiene diff visual nativo** (`--diff` y `Alt-x`). Riku podría simplemente invocar esto o wrapearlo, en lugar de construirlo desde cero.
 
-3. **El camino más eficiente para diff visual integrado en Miku:**
+3. **El camino más eficiente para diff visual integrado en Riku:**
    - Exportar ambas revisiones como SVG con `xschem -q --no_x --svg`
    - Mostrarlas en un viewer web side-by-side (siguiendo el patrón de KiRI)
    - Esto no requiere depender del GUI de Xschem
 
-4. **El git diff driver para `.sch` es el aporte concreto que Miku puede publicar** — nadie lo ha hecho todavía para Xschem.
+4. **El git diff driver para `.sch` es el aporte concreto que Riku puede publicar** — nadie lo ha hecho todavía para Xschem.
 
 5. **Para GDS el problema es más duro** (binario) → ver investigación de KLayout.
 
@@ -177,7 +177,7 @@ El driver de Xschem en la arquitectura asume que todo archivo `.sch` es formato 
 
 La detección por contenido de la Sección 2 del documento de arquitectura ya contempla `b'xschem version=' in h[:80]` — esto es correcto y suficiente para no confundir formatos.
 
-**Implicación práctica:** Si el usuario tiene archivos `.sch` de Qucs-S o KiCad en el mismo repo que archivos Xschem, Miku no los confundirá si la detección por contenido está implementada correctamente. No se requiere un driver Qucs-S para el MVP — basta con hacer fallback a diff de texto cuando el header no coincide.
+**Implicación práctica:** Si el usuario tiene archivos `.sch` de Qucs-S o KiCad en el mismo repo que archivos Xschem, Riku no los confundirá si la detección por contenido está implementada correctamente. No se requiere un driver Qucs-S para el MVP — basta con hacer fallback a diff de texto cuando el header no coincide.
 
 Fuente: [ngspice.sourceforge.io/ngspice-eeschema.html](https://ngspice.sourceforge.io/ngspice-eeschema.html), [github.com/ra3xdh/qucs_s](https://github.com/ra3xdh/qucs_s)
 
@@ -187,7 +187,7 @@ Casos documentados donde un proyecto de chips no tiene ningún `.sch` de Xschem:
 
 1. **Flujo puramente digital (OpenLane/OpenROAD):** Todo el diseño parte de Verilog. No hay esquemático analógico.
 2. **GDSFactory/GLayout (layout generado por Python):** El "esquemático" es implícito en el código; no hay `.sch`.
-3. **Cadence Virtuoso + PDK open:** El esquemático vive en Virtuoso (`.sdb`/`.cdl`). Miku nunca ve el esquemático.
+3. **Cadence Virtuoso + PDK open:** El esquemático vive en Virtuoso (`.sdb`/`.cdl`). Riku nunca ve el esquemático.
 4. **SPICE-first workflow:** El diseñador escribe el netlist directamente y nunca formaliza un esquemático gráfico.
 
 **Implicación:** `miku init` no debe requerir que exista un `.sch` para configurar el proyecto. Los drivers son opcionales — si no hay archivos Xschem, el driver simplemente nunca se invoca.
@@ -198,7 +198,7 @@ Xschem no puede importar un netlist SPICE existente y convertirlo en esquemátic
 
 El workaround actual: crear un símbolo vacío con los puertos correctos y el atributo `spice_sym_def` apuntando al netlist externo. Así funcionan todas las celdas estándar de SKY130 en el ambiente Xschem — no tienen esquemático gráfico, solo símbolos con netlists externos.
 
-**Implicación para el diff:** Cuando Miku hace diff de un `.sch` que incluye celdas via `spice_sym_def`, el diff semántico correcto requiere resolver esas referencias para entender qué cambió en el circuito. Un diff de solo el `.sch` sin resolver las referencias externas puede no detectar cambios significativos en el comportamiento del circuito.
+**Implicación para el diff:** Cuando Riku hace diff de un `.sch` que incluye celdas via `spice_sym_def`, el diff semántico correcto requiere resolver esas referencias para entender qué cambió en el circuito. Un diff de solo el `.sch` sin resolver las referencias externas puede no detectar cambios significativos en el comportamiento del circuito.
 
 Fuente: [github.com/StefanSchippers/xschem/issues/35](https://github.com/StefanSchippers/xschem/issues/35)
 
@@ -210,7 +210,7 @@ El diff de texto de un `.sch` muestra cambios de coordenadas crudos que son dif�
 > "Net VDD desconectado del gate de M3"  
 > "Componente C4 eliminado del esquemático"
 
-Esto es distinto al diff visual (SVG side-by-side) — es un diff estructurado legible en texto, como el diff semántico de JSON o XML. Sería el aporte de mayor impacto de Miku en el espacio Xschem, y no existe en ninguna herramienta.
+Esto es distinto al diff visual (SVG side-by-side) — es un diff estructurado legible en texto, como el diff semántico de JSON o XML. Sería el aporte de mayor impacto de Riku en el espacio Xschem, y no existe en ninguna herramienta.
 
 ---
 
@@ -223,7 +223,7 @@ Esto es distinto al diff visual (SVG side-by-side) — es un diff estructurado l
 - **Flag `--diff`** (v3.4.0+): https://github.com/StefanSchippers/xschem/blob/master/CHANGELOG
 
 ### Herramientas de diff visual para esquemáticos
-- **plotgitsch** (KiCad): https://github.com/jnavila/plotkicadsch — referencia de arquitectura para Miku
+- **plotgitsch** (KiCad): https://github.com/jnavila/plotkicadsch — referencia de arquitectura para Riku
 - **KiRI**: https://github.com/leoheck/kiri — diff web para KiCad, modelo de UX a seguir
 - **CADLAB.io**: https://cadlab.io — plataforma propietaria con diff visual para KiCad/Eagle
 

@@ -1,4 +1,4 @@
-# NGSpice — Diff y Versionado para Miku
+# NGSpice — Diff y Versionado para Riku
 
 ## 1. Formatos de archivo
 
@@ -88,12 +88,12 @@ SPICE no tiene orden canónico. El mismo circuito puede representarse de muchas 
 
 ### La solución pragmática: canonicalización
 
-El enfoque más efectivo a corto plazo para Miku es un **hook de pre-commit que canonicalice el netlist** antes de hacer commit:
+El enfoque más efectivo a corto plazo para Riku es un **hook de pre-commit que canonicalice el netlist** antes de hacer commit:
 - Ordenar líneas de componentes alfabéticamente
 - Normalizar listas de parámetros de `.subckt`
 - Eliminar o normalizar timestamps en comentarios generados
 
-Esto es análogo a `gofmt` o `prettier` para código — nadie lo ha hecho para SPICE todavía. **Sería un aporte concreto de Miku.**
+Esto es análogo a `gofmt` o `prettier` para código — nadie lo ha hecho para SPICE todavía. **Sería un aporte concreto de Riku.**
 
 ---
 
@@ -119,7 +119,7 @@ vmax=$(grep "vmax" sim.log | awk '{print $3}')
 python3 -c "assert abs($vmax - 3.3) < 0.1, f'Vmax fuera de tolerancia: {$vmax}'"
 ```
 
-**Este es el patrón de CI más usado en el ecosistema open source hoy.** Miku podría estandarizarlo.
+**Este es el patrón de CI más usado en el ecosistema open source hoy.** Riku podría estandarizarlo.
 
 ### Parseo de archivos `.raw` con Python
 
@@ -150,11 +150,11 @@ Librerías para parsear `.raw`:
 | **spyci + numpy** | Python custom | Parseo resuelto, lógica de comparación manual |
 | **spicelib RawRead + numpy** | Python custom | Igual |
 
-**No existe un "waveform XOR" open source.** Este es el gap más grande de Miku en el espacio NGSpice.
+**No existe un "waveform XOR" open source.** Este es el gap más grande de Riku en el espacio NGSpice.
 
 ---
 
-## 5. Netgen — Rol en el flujo y para Miku
+## 5. Netgen — Rol en el flujo y para Riku
 
 ### El flujo canónico
 
@@ -191,7 +191,7 @@ netgen -batch lvs "commit_a/amp.spice amp" "commit_b/amp.spice amp" \
 
 Si la topología es la misma pero cambiaron valores de componentes, Netgen lo reporta como match con property mismatches — exactamente la señal útil para un diff de versiones.
 
-**El JSON de Netgen podría ser el backend del diff estructural de Miku para netlists.**
+**El JSON de Netgen podría ser el backend del diff estructural de Riku para netlists.**
 
 ---
 
@@ -215,9 +215,9 @@ Si la topología es la misma pero cambiaron valores de componentes, Netgen lo re
 
 ---
 
-## 7. Ecosystem tools relevantes para Miku
+## 7. Ecosystem tools relevantes para Riku
 
-| Herramienta | Qué hace | Relevancia para Miku |
+| Herramienta | Qué hace | Relevancia para Riku |
 |---|---|---|
 | **spicelib** | SpiceEditor + SimRunner + RawRead | La base más madura para integración NGSpice |
 | **spyci** | Parser `.raw` ASCII → numpy | Parseo de resultados |
@@ -227,7 +227,7 @@ Si la topología es la misma pero cambiaron valores de componentes, Netgen lo re
 
 ---
 
-## 8. Flujo propuesto para Miku + NGSpice
+## 8. Flujo propuesto para Riku + NGSpice
 
 ```
 .spice commit A ─→ canonicalizar ─→ git diff legible
@@ -255,19 +255,19 @@ Si la topología es la misma pero cambiaron valores de componentes, Netgen lo re
 
 ---
 
-## 9. Conclusiones para Miku
+## 9. Conclusiones para Riku
 
 1. **Los netlists SPICE ya son texto plano** — `git diff` funciona sin configuración. El problema es el ruido (timestamps, ordenamiento no determinista). Un hook de canonicalización lo resuelve.
 
 2. **Los `.raw` no se versionan** — son artefactos de build. Lo que sí se versiona son los resultados de `.meas` (texto compacto) o métricas extraídas.
 
-3. **No existe diff semántico de netlists en open source.** Miku puede construirlo sobre spicelib (parseo) + Netgen (comparación topológica). **Es el gap más claro del ecosistema NGSpice.**
+3. **No existe diff semántico de netlists en open source.** Riku puede construirlo sobre spicelib (parseo) + Netgen (comparación topológica). **Es el gap más claro del ecosistema NGSpice.**
 
-4. **No existe waveform comparison open source con tolerancia.** El patrón actual es `.meas` + shell scripting. Miku puede formalizarlo con un CLI estándar y un formato JSON para los resultados.
+4. **No existe waveform comparison open source con tolerancia.** El patrón actual es `.meas` + shell scripting. Riku puede formalizarlo con un CLI estándar y un formato JSON para los resultados.
 
-5. **`spicelib`** es la librería más madura para la capa de integración de Miku con NGSpice: maneja lectura/escritura de netlists, ejecución batch, y parseo de `.raw`.
+5. **`spicelib`** es la librería más madura para la capa de integración de Riku con NGSpice: maneja lectura/escritura de netlists, ejecución batch, y parseo de `.raw`.
 
-6. **El JSON de Netgen** es la clave para diff estructural de netlists — Miku puede invocar Netgen entre dos commits y exponer su output de forma legible en un PR.
+6. **El JSON de Netgen** es la clave para diff estructural de netlists — Riku puede invocar Netgen entre dos commits y exponer su output de forma legible en un PR.
 
 ---
 
@@ -282,7 +282,7 @@ La Sección 3 ("Comparación de netlists SPICE") y la Sección 8 ("Flujo propues
 
 1. **Exploración topológica:** Diseñadores escriben netlists a mano para explorar topologías antes de formalizarlas en un esquemático. El `.spice` es la fuente; no existe `.sch`.
 2. **Celdas estándar del PDK:** En SKY130, los símbolos de dispositivos en Xschem no tienen esquemático propio — solo usan `spice_sym_def` para apuntar a un netlist externo. El `.spice` del PDK es la fuente; Xschem lo incluye por referencia.
-3. **Proyectos Cadence/Virtuoso + PDK open:** El esquemático vive en Virtuoso y Miku nunca lo ve. El `.spice` exportado es lo único disponible — y es fuente, no artefacto.
+3. **Proyectos Cadence/Virtuoso + PDK open:** El esquemático vive en Virtuoso y Riku nunca lo ve. El `.spice` exportado es lo único disponible — y es fuente, no artefacto.
 
 **Implicación:** La política "SPICE siempre va en `.gitignore`" (mencionada en cache_y_rendimiento y estrategia_merge) no puede ser una regla global. El `miku.toml` o `deps.toml` debe poder declarar si un `.spice` es derivado o fuente.
 
@@ -304,9 +304,9 @@ Magic (.mag) → extract all → .ext → ext2spice → netlist_extracted.spice 
 
 El netlist extraído puede tener decenas de miles de MOSFETs y capacitores parásitos. Los resultados de simulación son sistemáticamente distintos entre fases — no es una regresión, es una diferencia esperada por diseño.
 
-El problema: si Miku compara `.meas` results entre commits sin saber en qué fase está cada run, el diff es ambiguo o produce falsos positivos.
+El problema: si Riku compara `.meas` results entre commits sin saber en qué fase está cada run, el diff es ambiguo o produce falsos positivos.
 
-**Propuesta de extensión:** El `miku_sim.yaml` debería tener un campo `phase: pre_layout | post_layout` para que Miku compare solo runs de la misma fase.
+**Propuesta de extensión:** El `miku_sim.yaml` debería tener un campo `phase: pre_layout | post_layout` para que Riku compare solo runs de la misma fase.
 
 Fuente: [ngspice sourceforge discussion on real tapeouts](https://sourceforge.net/p/ngspice/discussion/120972/thread/69a4488f56/), [unic-cass analog design flow](https://unic-cass.github.io/training/1.4-analog-design-flow-intro.html)
 
@@ -321,7 +321,7 @@ modelo.va → OpenVAF → modelo.osdi → cargado en NGSpice via OSDI interface
 - `.va` son archivos de modelo — texto versionable, no deben ir en `.gitignore`
 - `.osdi` son binarios compilados — sí deben ir en `.gitignore` (artefacto de build)
 
-Si Miku genera `.gitignore` automáticamente con `miku init`, debe conocer el PDK para decidir correctamente. Un `.gitignore` genérico que incluya `*.va` destruiría los modelos Verilog-A de IHP.
+Si Riku genera `.gitignore` automáticamente con `miku init`, debe conocer el PDK para decidir correctamente. Un `.gitignore` genérico que incluya `*.va` destruiría los modelos Verilog-A de IHP.
 
 Fuente: [ngspice.sourceforge.io/osdi.html](https://ngspice.sourceforge.io/osdi.html), [OpenVAF discussions](https://github.com/pascalkuthe/OpenVAF/discussions/22), [IHP-Open-PDK](https://github.com/IHP-GmbH/IHP-Open-PDK)
 
@@ -340,7 +340,7 @@ La tabla de extensiones del documento incluye `.spice`, `.cir`, `.sp`, `.net`. E
 - `.cdl` — Circuit Description Language, usado por Virtuoso para exportar netlists LVS-clean
 - `.spi` — variante menor usada por algunos scripts de OpenLane
 
-El driver SPICE de Miku debería reconocer también `.cdl` y `.spi` por detección de contenido (misma sintaxis).
+El driver SPICE de Riku debería reconocer también `.cdl` y `.spi` por detección de contenido (misma sintaxis).
 
 ---
 

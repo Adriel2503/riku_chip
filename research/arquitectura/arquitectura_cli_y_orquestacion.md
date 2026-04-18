@@ -1,4 +1,4 @@
-# Arquitectura CLI y Orquestación — Miku
+# Arquitectura CLI y Orquestación — Riku
 
 > VCS especializado para diseño de chips sobre Git.  
 > Herramientas soportadas: KLayout, Xschem, NGSpice, Magic VLSI.  
@@ -55,7 +55,7 @@ miku diff --sim abc123..def456 amp.spice
 Merge de archivos de diseño. Para formatos texto (`.sch`, `.mag`, `.spice`) se apoya en git merge con drivers personalizados. Para GDS binario el merge automático no es viable; el comando reporta el conflicto y ofrece herramientas de resolución.
 
 ```bash
-# Merge estándar (delega a git, con pre/post hooks de Miku)
+# Merge estándar (delega a git, con pre/post hooks de Riku)
 miku merge feature-branch
 
 # Estrategia por tipo
@@ -203,7 +203,7 @@ miku ci upload --pr=42
 | Stage | Qué hace | Herramienta |
 |---|---|---|
 | `lint` | Verifica sintaxis de netlists y formatos | Python parsers |
-| `normalize` | Canonicaliza .spice, strip timestamps .mag | Miku hooks |
+| `normalize` | Canonicaliza .spice, strip timestamps .mag | Riku hooks |
 | `lvs` | Layout vs. Schematic | Netgen |
 | `drc` | Design Rule Check | KLayout / Magic |
 | `sim` | Simula netlists modificados | NGSpice -b |
@@ -341,13 +341,13 @@ Todo el código de cada herramienta vive en el mismo módulo. Sin interfaces for
 **Pros:** simple de arrancar, sin overhead de IPC.  
 **Contras:** inescalable. Agregar soporte para una herramienta nueva rompe otras. Imposible de testear en aislamiento. Conflictos de dependencias (el módulo KLayout vs. el módulo Magic comparten namespaces).
 
-**Veredicto: no aplica para Miku.** El número de herramientas y la disparidad de sus interfaces lo hacen inviable desde el MVP.
+**Veredicto: no aplica para Riku.** El número de herramientas y la disparidad de sus interfaces lo hacen inviable desde el MVP.
 
 ---
 
 #### Plugin System (carga dinámica)
 
-Cada driver es un módulo Python independiente que implementa una interfaz definida. Miku los descubre y carga en runtime vía `importlib` o entry points de `setuptools`.
+Cada driver es un módulo Python independiente que implementa una interfaz definida. Riku los descubre y carga en runtime vía `importlib` o entry points de `setuptools`.
 
 ```
 miku/
@@ -380,7 +380,7 @@ class DiffResult:
     summary: dict          # resumen estructurado siempre presente
     artifacts: list[Path]  # archivos generados (PNGs, GDS de XOR, etc.)
 
-class MikuDriver(Protocol):
+class RikuDriver(Protocol):
     name: str
     supported_extensions: list[str]
 
@@ -416,13 +416,13 @@ class MikuDriver(Protocol):
 - Más boilerplate inicial.
 - Descubrimiento dinámico agrega complejidad si se hace con entry points.
 
-**Veredicto: esta es la arquitectura correcta para Miku.** No requiere plugin discovery dinámico en el MVP — los drivers están hardcodeados en `DRIVERS = {"klayout": KLayoutDriver(), ...}`. La extensibilidad por entry points se agrega cuando haya usuarios externos.
+**Veredicto: esta es la arquitectura correcta para Riku.** No requiere plugin discovery dinámico en el MVP — los drivers están hardcodeados en `DRIVERS = {"klayout": KLayoutDriver(), ...}`. La extensibilidad por entry points se agrega cuando haya usuarios externos.
 
 ---
 
 #### Subprocess Delegation
 
-Cada operación se implementa como una llamada a un proceso externo (shell script, binario separado). Miku solo orquesta las llamadas.
+Cada operación se implementa como una llamada a un proceso externo (shell script, binario separado). Riku solo orquesta las llamadas.
 
 ```python
 # En vez de importar klayout.db:
@@ -433,7 +433,7 @@ result = subprocess.run(
 ```
 
 **Pros:**
-- Isolación perfecta: si KLayout crashea, no lleva a Miku consigo.
+- Isolación perfecta: si KLayout crashea, no lleva a Riku consigo.
 - No hay conflicto de dependencias Python.
 - Los scripts KLayout pueden ser en Ruby (su lenguaje nativo).
 - Facilita testear los scripts de forma independiente.
@@ -453,7 +453,7 @@ El patrón híbrido tiene sentido técnico:
 
 ---
 
-### Arquitectura recomendada para Miku (síntesis)
+### Arquitectura recomendada para Riku (síntesis)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -489,31 +489,31 @@ El patrón híbrido tiene sentido técnico:
 ### Jerarquía de errores
 
 ```python
-class MikuError(Exception):
-    """Base para todos los errores de Miku."""
+class RikuError(Exception):
+    """Base para todos los errores de Riku."""
     exit_code: int = 1
 
-class ToolNotFoundError(MikuError):
+class ToolNotFoundError(RikuError):
     """La herramienta requerida no está instalada."""
     exit_code = 127
 
-class ToolVersionError(MikuError):
+class ToolVersionError(RikuError):
     """La versión de la herramienta es incompatible."""
     exit_code = 126
 
-class ToolTimeoutError(MikuError):
+class ToolTimeoutError(RikuError):
     """La herramienta tardó más del timeout configurado."""
     exit_code = 124
 
-class ToolRuntimeError(MikuError):
+class ToolRuntimeError(RikuError):
     """La herramienta falló durante la ejecución."""
     exit_code = 1
 
-class FileFormatError(MikuError):
+class FileFormatError(RikuError):
     """El archivo no tiene el formato esperado."""
     exit_code = 1
 
-class DriverUnavailableError(MikuError):
+class DriverUnavailableError(RikuError):
     """El driver necesario no está disponible (herramienta ausente o versión incompatible)."""
     exit_code = 127
 ```
@@ -681,7 +681,7 @@ miku doctor — verificando entorno
 
 ### Estrategia de degradación graceful
 
-Cuando una herramienta no está disponible, Miku no falla completamente — ofrece el mejor diff posible con las herramientas presentes:
+Cuando una herramienta no está disponible, Riku no falla completamente — ofrece el mejor diff posible con las herramientas presentes:
 
 ```
 miku diff chip.gds
@@ -730,10 +730,10 @@ spice = ["netgen+spicelib", "text"]
 - Almacenamiento remoto requerido; sin servidor LFS, no funciona.
 - No canonicaliza .mag ni .spice — el ruido de timestamps persiste.
 
-**Relación con Miku:** complementario, no competidor. Miku puede y debe recomendar git-lfs para GDS grandes. Lo que Miku agrega es la capa semántica encima.
+**Relación con Riku:** complementario, no competidor. Riku puede y debe recomendar git-lfs para GDS grandes. Lo que Riku agrega es la capa semántica encima.
 
 ```toml
-# miku.toml — Miku puede configurar .gitattributes automáticamente
+# miku.toml — Riku puede configurar .gitattributes automáticamente
 [lfs]
 track = ["*.gds", "*.oas"]   # miku init --with-lfs configura esto
 ```
@@ -757,7 +757,7 @@ track = ["*.gds", "*.oas"]   # miku init --with-lfs configura esto
 - Orientado a ML: su vocabulario (experimentos, modelos, datasets) no encaja con diseño de chips.
 - Overhead de configuración alto para repos pequeños.
 
-**Qué puede aprender Miku de DVC:**
+**Qué puede aprender Riku de DVC:**
 - El modelo de **pipeline stages con caché** es exactamente lo que `miku ci` necesita. Si `amp.spice` no cambió, no re-simular.
 - El formato de **métricas versionadas** (`dvc metrics diff`) es el modelo para `miku log --sim-metric`.
 - La idea de separar **código fuente** (git) de **artefactos** (almacenamiento externo) es el mismo razonamiento que "GDS como artefacto de build".
@@ -800,7 +800,7 @@ track = ["*.gds", "*.oas"]   # miku init --with-lfs configura esto
 - Diff visual de imágenes, no semántico.
 - Sin pipeline CI, sin checks de LVS/DRC.
 
-**Qué puede aprender Miku de KiRI:**
+**Qué puede aprender Riku de KiRI:**
 - El **HTML standalone** (un archivo autocontenido con las dos imágenes y el JS del slider) es la mejor UX para adjuntar diffs a PRs sin requerir infraestructura.
 - El **patrón de exportar SVG headless** (`kicad-cli export svgsch`) es directamente replicable con `xschem -q --no_x --svg`.
 - El **side-by-side con slider** es más informativo que un overlay para cambios de posición de componentes.
@@ -833,7 +833,7 @@ track = ["*.gds", "*.oas"]   # miku init --with-lfs configura esto
 | **plotgitsch** | ❌ | KiCad only | ❌ | ❌ | ❌ | ❌ |
 | **KiRI** | ❌ | KiCad only | ❌ | ❌ | ❌ | ❌ |
 | **AllSpice.io** | ❌ | KiCad only | ❌ | ❌ | ❌ | ❌ |
-| **Miku** | ✅ KLayout | ✅ Xschem | ✅ Magic | ✅ NGSpice | ✅ | ✅ |
+| **Riku** | ✅ KLayout | ✅ Xschem | ✅ Magic | ✅ NGSpice | ✅ | ✅ |
 
 ---
 
@@ -845,7 +845,7 @@ KLayout tiene Python API en PyPI (`pip install klayout`). `spicelib` cubre NGSpi
 
 ### Decisión 2: Driver system sobre monolito desde el MVP
 
-No esperar a tener "suficiente código" para refactorizar. Definir el protocolo `MikuDriver` desde el principio y que cada herramienta sea un módulo separado. Costo: ~1 día de boilerplate. Beneficio: cada driver es testeable en aislamiento, las dependencias son opcionales, y el sistema funciona aunque falte una herramienta.
+No esperar a tener "suficiente código" para refactorizar. Definir el protocolo `RikuDriver` desde el principio y que cada herramienta sea un módulo separado. Costo: ~1 día de boilerplate. Beneficio: cada driver es testeable en aislamiento, las dependencias son opcionales, y el sistema funciona aunque falte una herramienta.
 
 ### Decisión 3: subprocess para Magic y NGSpice, API directa para KLayout y SPICE
 
@@ -853,7 +853,7 @@ Magic y NGSpice solo tienen interfaz TCL/CLI. KLayout tiene Python API usable si
 
 ### Decisión 4: GDS como artefacto de build, no como fuente versionada
 
-Si el flujo es Magic → GDS, la fuente es `.mag`. Si es GDSFactory/GLayout → GDS, la fuente es el Python. Versionar GDS en git es análogo a versionar binarios compilados. Se versiona en git-lfs o CI artifacts. Miku aplica diff de GDS cuando está disponible (para verificación), pero no lo trata como el objeto principal de versionado.
+Si el flujo es Magic → GDS, la fuente es `.mag`. Si es GDSFactory/GLayout → GDS, la fuente es el Python. Versionar GDS en git es análogo a versionar binarios compilados. Se versiona en git-lfs o CI artifacts. Riku aplica diff de GDS cuando está disponible (para verificación), pero no lo trata como el objeto principal de versionado.
 
 ### Decisión 5: El diff de texto siempre funciona
 
@@ -956,7 +956,7 @@ EXTENSION_MAP = {
 ## ¿Cuándo refutar estas decisiones?
 
 **"Driver system desde el MVP" (Decisión 2)** es prematuro si:
-- El primer usuario real de Miku es una sola persona con un solo flujo (ej. solo Magic+NGSpice, sin KLayout). El boilerplate del protocolo `MikuDriver` agrega fricción sin beneficio real hasta que haya al menos dos drivers siendo usados simultáneamente.
+- El primer usuario real de Riku es una sola persona con un solo flujo (ej. solo Magic+NGSpice, sin KLayout). El boilerplate del protocolo `RikuDriver` agrega fricción sin beneficio real hasta que haya al menos dos drivers siendo usados simultáneamente.
 
 **"subprocess para Magic y NGSpice" (Decisión 3)** cambia si:
 - Aparece una librería Python con bindings nativos para Magic (no existe hoy, pero el proyecto está activo). Subprocess tiene overhead y hace el manejo de errores más frágil.
@@ -966,7 +966,7 @@ EXTENSION_MAP = {
 - El flujo del usuario es diseño custom en KLayout directamente (sin Magic como fuente). En ese caso el GDS es la fuente, no el derivado. La decisión asume un flujo Magic→GDS que no es universal.
 
 **"miku.toml en el repo" (Decisión 6)** crea fricción si:
-- Miku se usa en repos que no son de chip (ej. un repo de firmware que incluye algunos esquemáticos). En ese caso un archivo de configuración en el repo puede molestar a colaboradores que no usan Miku.
+- Riku se usa en repos que no son de chip (ej. un repo de firmware que incluye algunos esquemáticos). En ese caso un archivo de configuración en el repo puede molestar a colaboradores que no usan Riku.
 
 ---
 
@@ -978,7 +978,7 @@ name = "my_chip"
 pdk = "sky130A"
 
 [tools]
-# Paths opcionales — si no se especifican, Miku busca en PATH
+# Paths opcionales — si no se especifican, Riku busca en PATH
 # klayout = "/opt/klayout/bin/klayout"
 # ngspice = "/usr/local/bin/ngspice"
 
@@ -1012,7 +1012,7 @@ spice = ["netgen+spicelib", "text"]
 track = ["*.gds", "*.oas"]
 
 [ignore]
-# Miku puede poblar .gitignore automáticamente
+# Riku puede poblar .gitignore automáticamente
 simulation_outputs = ["*.raw", "*.log", "*.err"]
 build_artifacts = ["*.gds"]     # si .mag es la fuente
 ```
@@ -1026,7 +1026,7 @@ build_artifacts = ["*.gds"]     # si .mag es la fuente
 - **DVC (Data Version Control)**: https://github.com/iterative/dvc — versionado de datos/modelos ML, cacheable
 - **plotgitsch**: https://github.com/jnavila/plotkicadsch — diff visual de esquemáticos KiCad sobre git
 - **KiRI (KiCad Review Interface)**: https://github.com/leoheck/kiri — diff visual web para KiCad
-- **AllSpice.io**: https://allspice.io — plataforma Git para hardware (propietaria), similar en visión a Miku
+- **AllSpice.io**: https://allspice.io — plataforma Git para hardware (propietaria), similar en visión a Riku
 
 ### Diseño de CLIs de referencia
 - **git** source: https://github.com/git/git — el modelo de subcomandos y extensibilidad

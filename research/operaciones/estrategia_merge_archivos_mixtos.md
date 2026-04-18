@@ -1,6 +1,6 @@
-# Estrategia de Merge para Archivos Mixtos en Miku
+# Estrategia de Merge para Archivos Mixtos en Riku
 
-Miku gestiona cuatro tipos de archivo con propiedades radicalmente distintas: GDS (binario, layout físico), .mag (texto, Magic VLSI), .sch (texto, Xschem), y .sp/.spice (texto, NGSpice). Un merge de rama involucra habitualmente cambios en más de uno de estos tipos al mismo tiempo, y la relación de derivación entre ellos introduce dependencias que Git ignora completamente. Este documento define la estrategia de merge de Miku: qué se puede fusionar automáticamente, qué requiere intervención, cómo representar conflictos de forma útil, y cómo registrar todo esto en el sistema de drivers de Git.
+Riku gestiona cuatro tipos de archivo con propiedades radicalmente distintas: GDS (binario, layout físico), .mag (texto, Magic VLSI), .sch (texto, Xschem), y .sp/.spice (texto, NGSpice). Un merge de rama involucra habitualmente cambios en más de uno de estos tipos al mismo tiempo, y la relación de derivación entre ellos introduce dependencias que Git ignora completamente. Este documento define la estrategia de merge de Riku: qué se puede fusionar automáticamente, qué requiere intervención, cómo representar conflictos de forma útil, y cómo registrar todo esto en el sistema de drivers de Git.
 
 ---
 
@@ -35,9 +35,9 @@ El diseñador A modifica `amp.sch` (cambia W/L de un transistor). El diseñador 
 **Escenario 3 — Layout y esquemático divergen topológicamente:**  
 Después de un merge, el .mag tiene la celda `nand2` con una conexión nueva pero el .sch todavía la tiene con la conexión vieja. El LVS falla.
 
-### Detección: el registro de dependencias de Miku
+### Detección: el registro de dependencias de Riku
 
-Miku debe mantener un archivo `.miku/deps.toml` versionado que registra relaciones de derivación:
+Riku debe mantener un archivo `.miku/deps.toml` versionado que registra relaciones de derivación:
 
 ```toml
 # .miku/deps.toml
@@ -54,7 +54,7 @@ derived_gds = "gds/amp.gds"
 derived_spice = "netlists/amp.sp"
 ```
 
-**En el hook `post-merge`**, Miku recorre este registro y verifica:
+**En el hook `post-merge`**, Riku recorre este registro y verifica:
 
 ```python
 # miku/hooks/post_merge.py — lógica central
@@ -118,7 +118,7 @@ GDS es un stream de records binarios sin estructura de texto que Git pueda unir.
 
 ### Merge a nivel de celda con KLayout Python API
 
-Para el caso de celdas disjuntas (el más común en equipos pequeños), Miku puede construir un GDS mergeado extrayendo cada celda del GDS ganador y combinándolas:
+Para el caso de celdas disjuntas (el más común en equipos pequeños), Riku puede construir un GDS mergeado extrayendo cada celda del GDS ganador y combinándolas:
 
 ```python
 # miku/merge/gds_merge.py
@@ -199,12 +199,12 @@ def cells_changed_from_base(base: db.Layout, variant: db.Layout) -> set[str]:
 ```
 
 **Limitaciones importantes:**
-- Esta estrategia solo es correcta cuando las celdas son verdaderamente independientes. Si la celda X referencia subceldas que B también modificó, el merge puede producir un layout inconsistente internamente. Miku debe verificar las dependencias de subcelda antes de declarar "celdas disjuntas".
+- Esta estrategia solo es correcta cuando las celdas son verdaderamente independientes. Si la celda X referencia subceldas que B también modificó, el merge puede producir un layout inconsistente internamente. Riku debe verificar las dependencias de subcelda antes de declarar "celdas disjuntas".
 - KLayout no tiene un equivalente a `git merge` con resolución de conflictos — la API de copia de celdas es de bajo nivel y requiere manejo cuidadoso de índices de layer y referencias.
 
 ### Cuando rechazar y pedir resolución manual
 
-Si hay conflictos en la misma celda, Miku produce un reporte claro en lugar de un archivo GDS corrupto:
+Si hay conflictos en la misma celda, Riku produce un reporte claro en lugar de un archivo GDS corrupto:
 
 ```
 [miku] CONFLICTO GDS — no se puede hacer merge automático de gds/top.gds
@@ -228,7 +228,7 @@ Archivos fuente relacionados:
   • layout/nand2.mag  → intentar merge en .mag primero, luego regenerar GDS
 ```
 
-**Decisión de diseño:** La recomendación de resolver en .mag es clave para la UX. En la mayoría de los flujos open source, el GDS es derivado del .mag. Si hay un conflicto en el GDS, la forma correcta de resolverlo es resolver el conflicto en el .mag y regenerar. Miku debe hacer esta ruta evidente.
+**Decisión de diseño:** La recomendación de resolver en .mag es clave para la UX. En la mayoría de los flujos open source, el GDS es derivado del .mag. Si hay un conflicto en el GDS, la forma correcta de resolverlo es resolver el conflicto en el .mag y regenerar. Riku debe hacer esta ruta evidente.
 
 ### Casos de uso reales: dos diseñadores en celdas distintas del mismo GDS
 
@@ -236,7 +236,7 @@ Archivos fuente relacionados:
 
 El diseñador 1 modifica la celda `alu` (routing de metal2). El diseñador 2 modifica la celda `register_file` (ajuste de sizing en poly). Ambas celdas son independientes (ninguna es subcelda de la otra).
 
-Resultado esperado: merge automático exitoso. Miku extrae los cambios de cada diseñador, combina los GDS, y produce un top-level válido.
+Resultado esperado: merge automático exitoso. Riku extrae los cambios de cada diseñador, combina los GDS, y produce un top-level válido.
 
 **Condición de éxito:** Que el GDS esté organizado jerárquicamente con celdas bien definidas (como es la práctica estándar). Los GDS completamente aplanados (flat) no tienen estructura de celda explotable.
 
@@ -246,9 +246,9 @@ Aunque las celdas hoja no conflictuen, la top cell (`chip_top`) contiene instanc
 
 **Caso C — El GDS está desactualizado en una de las ramas:**
 
-El diseñador 1 tiene su GDS actualizado (generado hoy). El diseñador 2 tiene un GDS de hace tres días (antes de los cambios de 1). Miku detecta este caso comparando los timestamps de los commits fuente y advierte antes de intentar el merge.
+El diseñador 1 tiene su GDS actualizado (generado hoy). El diseñador 2 tiene un GDS de hace tres días (antes de los cambios de 1). Riku detecta este caso comparando los timestamps de los commits fuente y advierte antes de intentar el merge.
 
-**Veredicto:** El merge automático de GDS es posible y útil para el caso de celdas disjuntas en diseños jerárquicos bien organizados, que es el caso normal en equipos. Es el gap que Miku puede cubrir de forma práctica.
+**Veredicto:** El merge automático de GDS es posible y útil para el caso de celdas disjuntas en diseños jerárquicos bien organizados, que es el caso normal en equipos. Es el gap que Riku puede cubrir de forma práctica.
 
 ---
 
@@ -276,7 +276,7 @@ El formato .mag es texto plano con secciones por capa (`<< metal1 >>`, `<< poly 
 | `timestamp` | Siempre distinto — ignorar (ver más abajo) |
 | Cambio de tech | Nunca debería pasar, pero es catastrófico si ocurre |
 
-**El problema del timestamp en .mag:** Magic actualiza el campo `timestamp` en cada save. Un merge produce siempre un conflicto trivial en esta línea aunque no haya cambios reales. Miku registra un merge driver que ignora timestamps:
+**El problema del timestamp en .mag:** Magic actualiza el campo `timestamp` en cada save. Un merge produce siempre un conflicto trivial en esta línea aunque no haya cambios reales. Riku registra un merge driver que ignora timestamps:
 
 ```ini
 # .gitattributes
@@ -284,7 +284,7 @@ El formato .mag es texto plano con secciones por capa (`<< metal1 >>`, `<< poly 
 ```
 
 ```python
-# El merge driver de Miku para .mag
+# El merge driver de Riku para .mag
 # Se invoca como: miku-mag-merge %O %A %B %L %P
 # %O = ancestro, %A = ours (se modifica in-place), %B = theirs
 
@@ -315,7 +315,7 @@ result = subprocess.run(
 sys.exit(result.returncode)
 ```
 
-**Para conflictos reales en .mag**, Miku produce marcadores con contexto de capa:
+**Para conflictos reales en .mag**, Riku produce marcadores con contexto de capa:
 
 ```
 << metal1 >>
@@ -330,7 +330,7 @@ rect 600 200 900 300
 >>>>>>> theirs (feature/timing — Ana, hace 45min)
 ```
 
-Este es el formato estándar de Git (`diff3`) pero Miku lo presenta con información adicional: quién hizo el cambio, en qué rama, y hace cuánto.
+Este es el formato estándar de Git (`diff3`) pero Riku lo presenta con información adicional: quién hizo el cambio, en qué rama, y hace cuánto.
 
 ### 3b. Merge de archivos .sch (Xschem)
 
@@ -357,7 +357,7 @@ El .sch de Xschem es una línea por objeto (wire `N`, componente `C`, texto `T`)
 
 **El "move all" es el caso más problemático para .sch.** Si un diseñador reorganiza el layout visual del esquemático (mueve todos los componentes para mejor legibilidad), cambian todas las coordenadas de todas las líneas `C` y `N`. Un merge con otra rama que también hizo cambios funcionales es prácticamente inmanejable automáticamente.
 
-**Solución de diseño para "move all":** Miku puede detectar si más del 80% de las líneas `C` y `N` de un archivo cambiaron sus coordenadas pero no sus propiedades — si es así, clasificar el commit como "reorganización visual" y advertir al hacer merge con ramas que tienen cambios funcionales. La resolución es manual pero la detección es automática.
+**Solución de diseño para "move all":** Riku puede detectar si más del 80% de las líneas `C` y `N` de un archivo cambiaron sus coordenadas pero no sus propiedades — si es así, clasificar el commit como "reorganización visual" y advertir al hacer merge con ramas que tienen cambios funcionales. La resolución es manual pero la detección es automática.
 
 ```python
 def classify_sch_change(diff_text: str) -> str:
@@ -384,7 +384,7 @@ def classify_sch_change(diff_text: str) -> str:
 
 Los netlists SPICE son texto, un componente por línea. El merge es funcionalmente idéntico al de .sch cuando los netlists son escritos a mano. Cuando son exportados desde Xschem, el problema es que son derivados y no deberían mergearse directamente — deberían regenerarse del .sch mergeado.
 
-**Política de Miku para .spice exportados:**
+**Política de Riku para .spice exportados:**
 
 ```toml
 # .miku/deps.toml
@@ -394,7 +394,7 @@ derived_spice = "netlists/amp.sp"
 export_tool = "xschem"
 ```
 
-Si `amp.sp` está marcado como derivado de `amp.sch`, Miku usa una estrategia diferente en el merge:
+Si `amp.sp` está marcado como derivado de `amp.sch`, Riku usa una estrategia diferente en el merge:
 
 1. Hacer merge de `amp.sch` primero (es la fuente).
 2. Si `amp.sch` mergea limpiamente, regenerar `amp.sp` automáticamente (`xschem -q --no_x --netlist amp.sch`).
@@ -413,9 +413,9 @@ Los markers de texto de Git son adecuados para código fuente donde el contexto 
 - En .sch: `C {nfet_01v8.sym} 890 -160 0 0 {name=M3 W=1 L=0.15}` es legible para un experto pero no comunica si hay solapamiento visual o conflicto eléctrico.
 - En GDS: no hay markers posibles — es binario.
 
-### El reporte de conflicto de Miku
+### El reporte de conflicto de Riku
 
-Miku genera un archivo `.miku/merge_report.json` después de cada merge con conflictos:
+Riku genera un archivo `.miku/merge_report.json` después de cada merge con conflictos:
 
 ```json
 {
@@ -509,7 +509,7 @@ miku show-conflict schematics/amp.sch
 # Invoca: xschem --diff /tmp/amp_ours.sch /tmp/amp_theirs.sch
 ```
 
-**Decisión de diseño:** Miku no construye su propio viewer desde cero. Delega la visualización a las herramientas nativas (KLayout, Xschem) que ya tienen la infraestructura correcta para mostrar estos formatos. La inversión de Miku es en la orquestación y en el reporte estructurado, no en reimplementar un renderer.
+**Decisión de diseño:** Riku no construye su propio viewer desde cero. Delega la visualización a las herramientas nativas (KLayout, Xschem) que ya tienen la infraestructura correcta para mostrar estos formatos. La inversión de Riku es en la orquestación y en el reporte estructurado, no en reimplementar un renderer.
 
 ---
 
@@ -518,7 +518,7 @@ miku show-conflict schematics/amp.sch
 ### Registro completo
 
 ```ini
-# .gitattributes — en la raíz del repositorio Miku
+# .gitattributes — en la raíz del repositorio Riku
 
 # Layouts Magic — merge con normalización de timestamps
 *.mag  merge=miku-mag  diff=miku-mag
@@ -546,19 +546,19 @@ miku show-conflict schematics/amp.sch
 # [include] path = .miku/gitconfig  (en .git/config)
 
 [merge "miku-mag"]
-    name = Miku merge driver para Magic VLSI (.mag)
+    name = Riku merge driver para Magic VLSI (.mag)
     driver = miku merge-driver mag %O %A %B %L %P
 
 [merge "miku-sch"]
-    name = Miku merge driver para Xschem (.sch)
+    name = Riku merge driver para Xschem (.sch)
     driver = miku merge-driver sch %O %A %B %L %P
 
 [merge "miku-spice"]
-    name = Miku merge driver para netlists SPICE
+    name = Riku merge driver para netlists SPICE
     driver = miku merge-driver spice %O %A %B %L %P
 
 [merge "miku-gds"]
-    name = Miku merge driver para GDS/OASIS (binario)
+    name = Riku merge driver para GDS/OASIS (binario)
     driver = miku merge-driver gds %O %A %B %L %P
 
 [diff "miku-mag"]
@@ -602,7 +602,7 @@ Los textconv de diff (para GDS especialmente) son costosos — invocan KLayout. 
 
 ### Instalación del .gitattributes sin contaminar el repo del usuario
 
-Un problema práctico: el usuario puede tener sus propios `.gitattributes` en el repositorio. Miku puede requerir que el repositorio incluya `.gitattributes` de Miku, o puede instalar sus drivers globalmente:
+Un problema práctico: el usuario puede tener sus propios `.gitattributes` en el repositorio. Riku puede requerir que el repositorio incluya `.gitattributes` de Riku, o puede instalar sus drivers globalmente:
 
 ```bash
 # Instalación global (afecta todos los repos del usuario)
@@ -610,12 +610,12 @@ miku install --global
 
 # Instalación local (solo este repo — recomendado)
 miku init
-# → crea/actualiza .gitattributes con los atributos de Miku
+# → crea/actualiza .gitattributes con los atributos de Riku
 # → agrega [include] path = .miku/gitconfig en .git/config
 # → no toca ~/.gitconfig
 ```
 
-**Decisión de diseño:** La instalación local es la default. El driver registrado globalmente puede causar problemas en repos que no son de Miku (si alguien tiene archivos .mag en un repo de config, por ejemplo). La opción `--global` existe pero requiere confirmación explícita.
+**Decisión de diseño:** La instalación local es la default. El driver registrado globalmente puede causar problemas en repos que no son de Riku (si alguien tiene archivos .mag en un repo de config, por ejemplo). La opción `--global` existe pero requiere confirmación explícita.
 
 ---
 
@@ -636,7 +636,7 @@ Nadie toca:     nand2.mag, chip_top.mag
 ```bash
 git checkout main
 git merge feature/sram feature/alu   # octopus merge
-# Miku intercepta via merge driver
+# Riku intercepta via merge driver
 
 [miku] Analizando conflictos en .mag...
   alu.mag:  solo modificado en feature/alu → merge trivial
@@ -656,7 +656,7 @@ git merge feature/sram feature/alu   # octopus merge
 Commit de merge listo.
 ```
 
-**Esto es automático.** El merge de las fuentes (.mag) es trivial para Git (archivos distintos). El valor de Miku está en la regeneración automática de GDS y la verificación de LVS post-merge.
+**Esto es automático.** El merge de las fuentes (.mag) es trivial para Git (archivos distintos). El valor de Riku está en la regeneración automática de GDS y la verificación de LVS post-merge.
 
 ### Caso 2 — Mismo archivo .mag, capas distintas
 
@@ -665,9 +665,9 @@ Ana modifica nand2.mag:   << metal1 >> (nuevo routing)
 Carlos modifica nand2.mag: << poly >>  (ajuste de sizing)
 ```
 
-**Git sin Miku:** Intenta merge de texto. Si las secciones `<< metal1 >>` y `<< poly >>` son bloques contiguos, puede haber conflictos de contexto aunque los cambios sean en capas distintas.
+**Git sin Riku:** Intenta merge de texto. Si las secciones `<< metal1 >>` y `<< poly >>` son bloques contiguos, puede haber conflictos de contexto aunque los cambios sean en capas distintas.
 
-**Miku con merge driver:**
+**Riku con merge driver:**
 1. Parsea el .mag en secciones por capa.
 2. Detecta que los cambios son en secciones distintas (`<< metal1 >>` vs `<< poly >>`).
 3. Toma las rect modificadas de Ana para metal1 y las de Carlos para poly.
@@ -683,7 +683,7 @@ Ana modifica M3 en amp.sch:   W=1.5 (optimización de velocidad)
 Carlos modifica M3 en amp.sch: W=2.0 (optimización de corriente)
 ```
 
-Este es un conflicto real de diseño, no de herramientas. Miku no puede resolverlo automáticamente y no debería intentarlo. Lo que sí puede hacer:
+Este es un conflicto real de diseño, no de herramientas. Riku no puede resolverlo automáticamente y no debería intentarlo. Lo que sí puede hacer:
 
 1. Detectar que es la misma propiedad del mismo componente.
 2. Mostrar el impacto simulado de cada opción: correr NGSpice con `W=1.5` y con `W=2.0` y mostrar las métricas de `.meas` (frecuencia de corte, corriente de saturación) en el reporte de conflicto.
@@ -701,7 +701,7 @@ Este es un conflicto real de diseño, no de herramientas. Miku no puede resolver
             miku merge --pick W=2.0 schematics/amp.sch
 ```
 
-**Decisión de diseño:** Este es el caso donde Miku invierte trabajo extra (correr NGSpice dos veces) para mejorar la UX. El diseñador tiene información para decidir, no solo un conflicto de texto. Es consistente con la prioridad del proyecto de invertir más trabajo si mejora la UX.
+**Decisión de diseño:** Este es el caso donde Riku invierte trabajo extra (correr NGSpice dos veces) para mejorar la UX. El diseñador tiene información para decidir, no solo un conflicto de texto. Es consistente con la prioridad del proyecto de invertir más trabajo si mejora la UX.
 
 ### Caso 4 — GDS en LFS, .mag como fuente
 
@@ -712,9 +712,9 @@ Si el proyecto usa Git LFS para GDS (recomendado para archivos >50MB):
 *.gds filter=lfs diff=miku-gds merge=miku-gds
 ```
 
-LFS y el merge driver de Miku son compatibles. Cuando Git invoca el merge driver, ya ha descargado los tres blobs (base, ours, theirs) desde LFS. El driver los recibe como archivos locales normales — no necesita saber que vienen de LFS.
+LFS y el merge driver de Riku son compatibles. Cuando Git invoca el merge driver, ya ha descargado los tres blobs (base, ours, theirs) desde LFS. El driver los recibe como archivos locales normales — no necesita saber que vienen de LFS.
 
-**Sin embargo:** Con LFS, el merge de GDS implica descargar tres versiones del archivo (potencialmente 3×500MB = 1.5GB). Miku debe advertir esto antes del merge si detecta que el GDS está en LFS y es grande:
+**Sin embargo:** Con LFS, el merge de GDS implica descargar tres versiones del archivo (potencialmente 3×500MB = 1.5GB). Riku debe advertir esto antes del merge si detecta que el GDS está en LFS y es grande:
 
 ```
 [miku] ADVERTENCIA: El merge de gds/chip_top.gds requiere descargar ~1.4 GB de LFS.
@@ -749,11 +749,11 @@ Fuente: [OpenLane issue #1420 — gate-level mixed-signal](https://github.com/Th
 
 ### Nota 2: `.spice` derivado vs. `.spice` fuente — la distinción no siempre es clara
 
-La Sección 3c establece que si `amp.sp` está marcado como derivado, Miku lo regenera del `.sch` mergeado. Hay casos donde el `.spice` NO es derivado:
+La Sección 3c establece que si `amp.sp` está marcado como derivado, Riku lo regenera del `.sch` mergeado. Hay casos donde el `.spice` NO es derivado:
 
-- Celdas estándar SKY130 en Xschem: el `.spice` del PDK es la fuente; el símbolo Xschem lo referencia con `spice_sym_def`. Si Miku intenta "regenerar" este archivo desde el `.sch`, destruiría el modelo del PDK.
+- Celdas estándar SKY130 en Xschem: el `.spice` del PDK es la fuente; el símbolo Xschem lo referencia con `spice_sym_def`. Si Riku intenta "regenerar" este archivo desde el `.sch`, destruiría el modelo del PDK.
 - Netlists escritos a mano para exploración topológica — no tienen `.sch` fuente.
-- Netlists exportados de Cadence Virtuoso — el `.sch` no existe en el repo de Miku.
+- Netlists exportados de Cadence Virtuoso — el `.sch` no existe en el repo de Riku.
 
 **El `deps.toml` necesita distinguir:** `derived_spice` (regenerable desde `.sch`) vs. `primary_spice` (fuente, no tocar). Sin esta distinción, el merge driver puede corromper archivos de modelos del PDK.
 

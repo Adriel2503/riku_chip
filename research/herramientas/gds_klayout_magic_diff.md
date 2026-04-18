@@ -1,10 +1,10 @@
-# GDS / KLayout / Magic — Diff y Git Integration para Miku
+# GDS / KLayout / Magic — Diff y Git Integration para Riku
 
 ## 1. El problema raíz: GDS es binario
 
 **GDSII (.gds)** es un formato binario — `git diff` solo muestra "binary file changed". No hay texto que comparar. Esta es la diferencia fundamental con Xschem (.sch) y Magic (.mag), que son texto plano.
 
-**Estrategia de Miku para GDS:** tratar GDS como artefacto de build (como un ejecutable compilado), no como fuente. La fuente versionable es .mag o código Python (GDSFactory/GLayout).
+**Estrategia de Riku para GDS:** tratar GDS como artefacto de build (como un ejecutable compilado), no como fuente. La fuente versionable es .mag o código Python (GDSFactory/GLayout).
 
 ---
 
@@ -239,7 +239,7 @@ box 0 0 100 100
 
 Magic actualiza el campo `timestamp` en cada save de la celda y de sus parents. Resultado: abrir y guardar sin cambios produce un diff con líneas `timestamp` modificadas — ruido puro.
 
-**Solución para Miku:** git textconv/clean filter que normalice o elimine timestamps:
+**Solución para Riku:** git textconv/clean filter que normalice o elimine timestamps:
 
 ```bash
 # .gitattributes
@@ -311,7 +311,7 @@ KLayout hace un **XOR de verificación** comparando el GDS de Magic con el de KL
 
 ---
 
-## 9. Flujo de diff propuesto para Miku
+## 9. Flujo de diff propuesto para Riku
 
 ### Para .mag (Magic)
 
@@ -347,11 +347,11 @@ commit B (.gds) ┘ → strmcmp → texto legible (stdout)
 
 ---
 
-## 10. Herramientas del ecosistema relevantes para Miku
+## 10. Herramientas del ecosistema relevantes para Riku
 
 | Herramienta | Qué hace | Relevancia |
 |---|---|---|
-| **lytest** | pytest + KLayout XOR, testing de regresión de GDS | Referencia de arquitectura para CI de Miku |
+| **lytest** | pytest + KLayout XOR, testing de regresión de GDS | Referencia de arquitectura para CI de Riku |
 | **GDSFactory `gf gds diff`** | CLI diff por capas con KLayout | Precedente de UX |
 | **efabless/utilities `xor`** | CLI wrapper de KLayout XOR | Alternativa simple |
 | **gdstk** | Leer/escribir GDS en Python | Base para textconv driver |
@@ -359,7 +359,7 @@ commit B (.gds) ┘ → strmcmp → texto legible (stdout)
 
 ---
 
-## 11. Conclusiones para Miku
+## 11. Conclusiones para Riku
 
 1. **GDS como artefacto de build, no como fuente.** Si el diseñador usa Magic, `.mag` es la fuente. Si usa GDSFactory/GLayout, el Python es la fuente. GDS va a CI artifacts o Git LFS.
 
@@ -367,9 +367,9 @@ commit B (.gds) ┘ → strmcmp → texto legible (stdout)
 
 3. **`strmcmp` es el candidato más directo** para un git textconv de GDS: produce texto legible, exit code semántico, sin necesitar Python.
 
-4. **Magic necesita el filtro de timestamps** — sin eso, el diff en git es inservible. Este filtro es simple y sería el aporte más inmediato de Miku para la comunidad Magic.
+4. **Magic necesita el filtro de timestamps** — sin eso, el diff en git es inservible. Este filtro es simple y sería el aporte más inmediato de Riku para la comunidad Magic.
 
-5. **Ninguna de estas integraciones existe publicada** como git driver. Miku cubriría un gap real en los tres casos: `.sch` (Xschem), `.mag` (Magic), `.gds` (KLayout).
+5. **Ninguna de estas integraciones existe publicada** como git driver. Riku cubriría un gap real en los tres casos: `.sch` (Xschem), `.mag` (Magic), `.gds` (KLayout).
 
 6. **El flujo de visualización más viable para CI:** `.mag` → `magic -dnull` → `.gds` → `klayout -b XOR` → `.gds con diferencias` → `klayout -zz render` → PNG.
 
@@ -416,7 +416,7 @@ sed -i -e '/<?xml/d' $PDK_ROOT/$PDK/libs.tech/klayout/pymacros/sky130.lym
 sed -i -e 's/sky130/sky130A/' $PDK_ROOT/$PDK/libs.tech/klayout/tech/sky130A.lyt
 ```
 
-Si el CI de Miku no aplica estos patches, fallará silenciosamente en cualquier entorno SKY130 fresco. El `miku doctor` debería detectar y reportar este estado.
+Si el CI de Riku no aplica estos patches, fallará silenciosamente en cualquier entorno SKY130 fresco. El `miku doctor` debería detectar y reportar este estado.
 
 Fuente: [unic-cass KLayout Sky130 tutorial (2024)](https://unic-cass.github.io/training/sky130/3.3-layout-klayout.html)
 
@@ -427,7 +427,7 @@ KLayout forum issue #1026 documenta que GDS exportado desde KLayout puede ser re
 - `$$$CONTEXT_INFO$$$` dummy cell rechazada por terceros
 - Arrays no-ortogonales que generan warnings y se omiten
 
-Workarounds: usar OASIS en vez de GDS, deshabilitar PCell context storage. Documentar esto como limitación conocida al usar Miku en flujos que terminan en foundry submission.
+Workarounds: usar OASIS en vez de GDS, deshabilitar PCell context storage. Documentar esto como limitación conocida al usar Riku en flujos que terminan en foundry submission.
 
 Fuente: [KLayout forum #1026](https://www.klayout.de/forum/discussion/1026/very-important-gds-exported-from-k-layout-not-working-on-cadence-at-foundry)
 
@@ -439,7 +439,7 @@ El flujo de diff actual asume que el layout tiene una fuente editable (`.mag` o 
 - No hay nada que diffear en el GDS salvo verificación de regresión
 - El diff semántico relevante es entre las dos versiones del script Python
 
-Este caso no está cubierto por los drivers actuales. No requiere un driver nuevo — requiere que `miku.toml` pueda declarar `layout.source = "python"` y que Miku no intente diffear el GDS como si fuera fuente.
+Este caso no está cubierto por los drivers actuales. No requiere un driver nuevo — requiere que `miku.toml` pueda declarar `layout.source = "python"` y que Riku no intente diffear el GDS como si fuera fuente.
 
 Referencia: [github.com/gdsfactory/gdsfactory](https://github.com/gdsfactory/gdsfactory), [OpenFASoC GLayout](https://openfasoc.readthedocs.io/en/latest/notebooks/glayout/glayout_opamp.html)
 

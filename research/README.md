@@ -1,6 +1,6 @@
-# Investigación — Miku
+# Investigación — Riku
 
-Miku es un VCS especializado para diseño de chips IC analógico, construido sobre Git. Soporta KLayout, Xschem, NGSpice y Magic VLSI.
+Riku es un VCS especializado para diseño de chips IC analógico, construido sobre Git. Soporta KLayout, Xschem, NGSpice y Magic VLSI.
 
 **Prioridades de diseño:** rendimiento, tamaño mínimo de artefactos en el repo, experiencia de usuario práctica.
 
@@ -122,7 +122,7 @@ lenguajes_y_stack
 | open_pdks | https://github.com/RTimothyEdwards/open_pdks | Incluye setup.tcl para Netgen+SKY130 |
 
 ### Librerías Python
-| Librería | Repo | Uso en Miku |
+| Librería | Repo | Uso en Riku |
 |---|---|---|
 | klayout (PyPI) | https://github.com/KLayout/klayout | XOR, diff, DRC — sin X11 |
 | gdstk | https://github.com/heitzmann/gdstk | Parse/write GDS rápido |
@@ -131,7 +131,7 @@ lenguajes_y_stack
 | click / typer | https://github.com/pallets/click | CLI framework |
 
 ### Librerías Rust
-| Librería | Repo | Uso en Miku |
+| Librería | Repo | Uso en Riku |
 |---|---|---|
 | gds21 | https://github.com/dan-fritchman/Layout21 | Parser GDS streaming |
 | Layout21 | https://github.com/dan-fritchman/Layout21 | Framework layout en Rust |

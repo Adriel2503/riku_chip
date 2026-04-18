@@ -1,6 +1,6 @@
-# CI y Detección de Regresiones DRC/LVS para Miku
+# CI y Detección de Regresiones DRC/LVS para Riku
 
-> Investigación para el diseño del subsistema de integración continua de Miku — VCS especializado
+> Investigación para el diseño del subsistema de integración continua de Riku — VCS especializado
 > para diseño de chips sobre Git, con soporte para KLayout, Xschem, NGSpice y Magic VLSI.
 
 ---
@@ -44,11 +44,11 @@ La analogía con testing de software es directa:
 La diferencia clave con tests de software: **DRC/LVS pueden tardar horas en diseños grandes**.
 Esto hace que el diseño del sistema de caché (sección 6) sea tan importante como el check en sí.
 
-### El rol de Miku en este contexto
+### El rol de Riku en este contexto
 
-Miku no reemplaza KLayout DRC, Netgen LVS ni Magic. Los **orquesta como backend**, extrae
+Riku no reemplaza KLayout DRC, Netgen LVS ni Magic. Los **orquesta como backend**, extrae
 resultados, los asocia al commit que los generó, calcula deltas respecto al commit anterior, y
-los expone de forma legible en un PR. El valor de Miku es la integración, no la implementación
+los expone de forma legible en un PR. El valor de Riku es la integración, no la implementación
 de los algoritmos de verificación.
 
 ---
@@ -123,7 +123,7 @@ end
 
 ### Parseo del `.lyrdb` desde Python
 
-Si el script DRC ya produce `.lyrdb` (sin modificar), Miku puede parsearlo en Python:
+Si el script DRC ya produce `.lyrdb` (sin modificar), Riku puede parsearlo en Python:
 
 ```python
 import klayout.db as db
@@ -149,7 +149,7 @@ sistema para esta operación. Es headless y funciona en Linux CI sin X11.
 
 ### Delta vs. commit anterior
 
-El cálculo del delta es responsabilidad de Miku, no de KLayout. El flujo:
+El cálculo del delta es responsabilidad de Riku, no de KLayout. El flujo:
 
 ```python
 import json, subprocess, pathlib
@@ -301,7 +301,7 @@ def run_lvs(layout_spice: str, schematic_spice: str, top_cell: str,
 
 ### LVS entre commits — el flujo completo
 
-Para comparar LVS entre commit A y commit B, el flujo de Miku es:
+Para comparar LVS entre commit A y commit B, el flujo de Riku es:
 
 ```
 git show commit_A:schematic.sch → xschem --netlist → sch_A.spice
@@ -385,7 +385,7 @@ def parse_meas_log(log_path: str) -> dict:
 
 ### Configuración de tolerancias
 
-Miku necesita un archivo de configuración por testbench que defina las tolerancias aceptables:
+Riku necesita un archivo de configuración por testbench que defina las tolerancias aceptables:
 
 ```yaml
 # miku_sim.yaml — en el directorio del testbench o en .miku/
@@ -457,7 +457,7 @@ print(r.get_trace_names())  # ['time', 'v(out)', 'v(in)', 'i(r1)']
 wave = r.get_trace("v(out)").get_wave()   # numpy array
 ```
 
-### Integración en el flujo Miku
+### Integración en el flujo Riku
 
 ```python
 def waveform_regression(commit_base: str, commit_head: str,
@@ -563,7 +563,7 @@ def post_pr_comment(report_markdown: str):
     pr_num  = os.environ["PR_NUMBER"]
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
 
-    # Buscar comment existente de Miku para actualizar en vez de crear nuevo
+    # Buscar comment existente de Riku para actualizar en vez de crear nuevo
     comments = requests.get(
         f"https://api.github.com/repos/{repo}/issues/{pr_num}/comments",
         headers=headers
@@ -584,7 +584,7 @@ def post_pr_comment(report_markdown: str):
 ```
 
 **Decisión de diseño clave:** Actualizar el mismo comment en vez de crear uno nuevo por cada
-push al PR. Sin esto, un PR con 10 force-pushes genera 10 comentarios de Miku.
+push al PR. Sin esto, un PR con 10 force-pushes genera 10 comentarios de Riku.
 
 ### Integración con GitLab CI — MR notes
 
@@ -717,7 +717,7 @@ def compute_cell_cache_key(cell_name: str, layout: db.Layout,
 ### Integración con GitHub Actions cache
 
 ```yaml
-- name: Cache Miku DRC/LVS results
+- name: Cache Riku DRC/LVS results
   uses: actions/cache@v4
   with:
     path: .miku_cache/
@@ -727,7 +727,7 @@ def compute_cell_cache_key(cell_name: str, layout: db.Layout,
 ```
 
 **Limitación:** `hashFiles` de GitHub Actions es por patrón de archivos en el workspace.
-La caché local de Miku (basada en contenido exacto) es más granular — la caché de Actions
+La caché local de Riku (basada en contenido exacto) es más granular — la caché de Actions
 es el segundo nivel para evitar re-transferir resultados entre runners.
 
 ### Qué evitar en la estrategia de caché
@@ -747,7 +747,7 @@ es el segundo nivel para evitar re-transferir resultados entre runners.
 
 ```yaml
 # .github/workflows/miku_checks.yml
-name: Miku DRC/LVS/Sim Checks
+name: Riku DRC/LVS/Sim Checks
 
 on:
   pull_request:
@@ -776,7 +776,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Miku and dependencies
+      - name: Install Riku and dependencies
         run: |
           pip install miku klayout spicelib
           # KLayout para DRC completo (incluye klayout.lay)
@@ -787,7 +787,7 @@ jobs:
           pip install volare
           volare enable --pdk sky130 ${{ env.PDK_VERSION }}
 
-      - name: Restore Miku cache
+      - name: Restore Riku cache
         uses: actions/cache@v4
         with:
           path: .miku_cache/
@@ -850,7 +850,7 @@ jobs:
             const drc = JSON.parse(fs.readFileSync('drc_report.json'));
             const lvs = JSON.parse(fs.readFileSync('lvs_report.json'));
             const sim = JSON.parse(fs.readFileSync('sim_report.json'));
-            // Miku genera el markdown del reporte
+            // Riku genera el markdown del reporte
             const body = require('./scripts/miku_format_report.js')({drc, lvs, sim});
             // Buscar comment existente para actualizar
             const comments = await github.rest.issues.listComments({
@@ -954,7 +954,7 @@ miku-drc-lvs:
   allow_failure: false
 ```
 
-### Configuración del proyecto Miku (`.miku/config.yaml`)
+### Configuración del proyecto Riku (`.miku/config.yaml`)
 
 ```yaml
 # .miku/config.yaml — en el repositorio del proyecto de chip
@@ -962,7 +962,7 @@ version: 1
 
 pdk:
   name: sky130A
-  version: "0.0.2"    # Miku verifica que el PDK instalado coincide
+  version: "0.0.2"    # Riku verifica que el PDK instalado coincide
 
 drc:
   enabled: true
@@ -1014,7 +1014,7 @@ Magic (.mag) → extract → netlist de layout
 
 En proyectos reales:
 - **PDK IHP (KLayout primario):** La extracción de layout para LVS puede hacerse desde KLayout, no desde Magic. KLayout tiene su propio engine LVS (desde v0.27). El flujo `magic extract → ext2spice` no aplica si el diseñador nunca usó Magic.
-- **Cadence Virtuoso + open PDK:** El netlist esquemático viene de Virtuoso (`.cdl`), no de Xschem. Miku no puede generar el netlist esquemático invocando `xschem --netlist`.
+- **Cadence Virtuoso + open PDK:** El netlist esquemático viene de Virtuoso (`.cdl`), no de Xschem. Riku no puede generar el netlist esquemático invocando `xschem --netlist`.
 - **KLayout LVS como alternativa a Netgen:** KLayout incorpora un engine de LVS propio que puede reemplazar a Netgen para algunos PDKs. Está documentado como alternativa en la nota "¿Cuándo refutar estas decisiones?" — pero no hay investigación sobre cuándo KLayout LVS tiene paridad real con Netgen para SKY130/IHP.
 
 **Investigación pendiente:** Verificar si el KLayout LVS engine (disponible vía `klayout -b -r lvs_script.lylvs`) produce resultados equivalentes a Netgen para SKY130A y IHP SG13G2. Si tiene paridad, reduce la dependencia de Netgen para proyectos KLayout-primary.
@@ -1040,7 +1040,7 @@ Fuente: [github.com/chipfoundry/volare](https://github.com/chipfoundry/volare), 
 
 ### Nota 3: Bugs de integración PDK-herramienta que rompen CI silenciosamente
 
-El tutorial de unic-cass (2024) documenta bugs en la distribución oficial de SKY130 que hacen fallar KLayout sin mensaje de error claro. Si el CI de Miku no aplica los patches necesarios, el DRC falla silenciosamente.
+El tutorial de unic-cass (2024) documenta bugs en la distribución oficial de SKY130 que hacen fallar KLayout sin mensaje de error claro. Si el CI de Riku no aplica los patches necesarios, el DRC falla silenciosamente.
 
 El `miku doctor` y el step de setup del workflow de GitHub Actions deben incluir detección y aplicación automática de estos patches, o al menos verificación explícita de que el PDK fue instalado correctamente.
 
@@ -1060,7 +1060,7 @@ Fuente: [semiwiki.com Efabless shutdown](https://semiwiki.com/forum/threads/efab
 
 La Sección 4 asume una sola fase de simulación. En flujos reales existen dos fases con resultados sistemáticamente distintos (ver ngspice_diff_y_versionado.md Nota 10b).
 
-El `miku_sim.yaml` debería tener un campo `phase: pre_layout | post_layout` para que Miku no compare resultados de fases distintas y genere falsos positivos de regresión.
+El `miku_sim.yaml` debería tener un campo `phase: pre_layout | post_layout` para que Riku no compare resultados de fases distintas y genere falsos positivos de regresión.
 
 ---
 
@@ -1101,7 +1101,7 @@ y simulación re-ejecutan. Combinarlos en un solo job obliga a re-ejecutar todo 
 
 ### Por qué exponer el JSON estructurado y no solo pass/fail
 
-El JSON de cada check es la interfaz pública de Miku hacia otras herramientas. Permite que
+El JSON de cada check es la interfaz pública de Riku hacia otras herramientas. Permite que
 otros sistemas lean los resultados (dashboards, alertas Slack, métricas históricas). Un
 pass/fail es suficiente para el CI pero insuficiente para el flujo de trabajo del diseñador.
 

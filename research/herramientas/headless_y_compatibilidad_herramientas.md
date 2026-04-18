@@ -1,4 +1,4 @@
-# Entornos Headless y Compatibilidad de Versiones — Herramientas EDA para Miku
+# Entornos Headless y Compatibilidad de Versiones — Herramientas EDA para Riku
 
 ## 1. El problema de X11 en CI
 
@@ -18,7 +18,7 @@ Hay tres estrategias para resolverlo, con características distintas:
 | **Offscreen rendering Qt** | Variable de entorno `QT_QPA_PLATFORM=offscreen` | Ninguno | Sí (Qt) |
 | **Modo batch puro** | Flags del propio binario que evitan inicializar Qt/X11 | Ninguno | No |
 
-**Decisión de diseño para Miku:** preferir modo batch puro cuando esté disponible (KLayout `-b`, Magic `-dnull`). Usar `QT_QPA_PLATFORM=offscreen` como fallback para operaciones que necesiten el subsistema gráfico de KLayout sin pantalla real. Xvfb solo cuando no haya alternativa (Xschem para diff visual interactivo, Magic con `-d XR`).
+**Decisión de diseño para Riku:** preferir modo batch puro cuando esté disponible (KLayout `-b`, Magic `-dnull`). Usar `QT_QPA_PLATFORM=offscreen` como fallback para operaciones que necesiten el subsistema gráfico de KLayout sin pantalla real. Xvfb solo cuando no haya alternativa (Xschem para diff visual interactivo, Magic con `-d XR`).
 
 ### Patrón Xvfb en CI
 
@@ -66,7 +66,7 @@ La distinción clave es entre el paquete PyPI (`pip install klayout`) y el paque
 | DRC scripts Ruby/Python | ✅ | ✅ |
 | Macros LVS | ✅ | ✅ |
 
-**Para CI en Miku:** `pip install klayout` cubre diff, XOR y DRC. Para exportar PNG de layout, instalar el paquete del sistema.
+**Para CI en Riku:** `pip install klayout` cubre diff, XOR y DRC. Para exportar PNG de layout, instalar el paquete del sistema.
 
 ### Flags esenciales
 
@@ -153,7 +153,7 @@ Verificado contra el código fuente de Xschem y reportes de usuarios en CI:
 - **El flag es `--no_x` en algunas builds y `-x` en otras** — depende de cómo fue compilado. Probar ambos.
 - **Las librerías Tk/Tcl siguen siendo dependencias en tiempo de ejecución** aunque no se use la GUI. Si no están instaladas, el proceso falla con `Error in startup script: can't find package Tk`.
 - **Xschem lee `xschemrc`** al arrancar. Si hay comandos que asumen display en ese archivo de config del usuario, fallan en CI. Solución: usar `--rcfile /dev/null` o un xschemrc limpio para CI.
-- **El netlist generado puede contener timestamps** en comentarios — aplicar el canonicalizador de Miku antes de hacer commit.
+- **El netlist generado puede contener timestamps** en comentarios — aplicar el canonicalizador de Riku antes de hacer commit.
 - **En versiones compiladas con soporte Cairo** (la mayoría de los paquetes del sistema), PNG y SVG usan el backend Cairo directamente, sin necesidad de X11 una vez inicializado con `--no_x`. En versiones sin Cairo, la exportación PNG requiere display.
 
 ### Comandos Tcl útiles para automatización
@@ -359,7 +359,7 @@ def get_magic_version() -> str | None:
 | NGSpice | 36 | 42 | Cambios en formato de salida `.meas` entre versiones principales |
 | Magic | 8.3.100 | 8.3.320+ | Bugs en `ext2spice` jerárquico en < 8.3.x |
 
-### Implementación del checker en Miku
+### Implementación del checker en Riku
 
 ```python
 # miku/version_check.py
@@ -406,7 +406,7 @@ def check_tools(warn_only: bool = False) -> dict:
     return results
 ```
 
-Miku ejecuta `check_tools()` al inicio de cualquier operación que involucre una herramienta específica, no globalmente al arrancar — esto permite que Miku sea útil incluso si solo está instalada una parte del stack.
+Riku ejecuta `check_tools()` al inicio de cualquier operación que involucre una herramienta específica, no globalmente al arrancar — esto permite que Riku sea útil incluso si solo está instalada una parte del stack.
 
 ---
 
@@ -438,7 +438,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netgen-lvs \
     # Runtime X11 headless (para Xvfb si se necesita)
     xvfb \
-    # Python + pip (para klayout PyPI y scripts de Miku)
+    # Python + pip (para klayout PyPI y scripts de Riku)
     python3 python3-pip \
     # Conversión de imágenes (PNM → PNG, overlay de diffs)
     imagemagick \
@@ -472,7 +472,7 @@ Sin KLayout (solo Xschem + Magic + NGSpice): ~150 MB.
 
 La imagen descomprimida en disco es ~700-900 MB dependiendo del release de Ubuntu y los paquetes.
 
-### Dockerfile completo para CI de Miku
+### Dockerfile completo para CI de Riku
 
 ```dockerfile
 FROM ubuntu:22.04
@@ -519,7 +519,7 @@ FROM efabless/openlane:latest
 # Tamaño: ~2 GB descomprimida — útil si ya se usa el flujo OpenLane
 ```
 
-Para Miku, que apunta a ser liviano, la imagen propia basada en ubuntu:22.04 es preferible.
+Para Riku, que apunta a ser liviano, la imagen propia basada en ubuntu:22.04 es preferible.
 
 ### GitHub Actions — uso de la imagen
 
@@ -531,7 +531,7 @@ jobs:
       image: ghcr.io/tu-org/miku-eda:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Miku checks
+      - name: Run Riku checks
         run: |
           miku diff HEAD~1 HEAD
           miku drc --tool klayout
@@ -690,7 +690,7 @@ Las herramientas corren a velocidad nativa en WSL2 (no emuladas). La única pena
 | Uso en GitHub Actions | ✅ ubuntu-latest | ✅ macos-latest | ❌ no soportado directamente |
 | PDK accesible | ✅ | ✅ | ✅ (dentro de WSL2 fs) |
 
-### Detección de plataforma en Miku
+### Detección de plataforma en Riku
 
 ```python
 import platform, shutil, os
@@ -725,10 +725,10 @@ def get_klayout_buddies_path() -> str | None:
 ## ¿Cuándo refutar estas decisiones?
 
 **"Batch puro primero, Xvfb como fallback"** falla si:
-- Alguna operación crítica de Miku (ej. render de PNG de alta calidad para el PR) no tiene equivalente en batch puro en KLayout o Xschem. En ese caso Xvfb pasa de fallback a requerimiento y hay que documentarlo como tal, no esconderlo.
+- Alguna operación crítica de Riku (ej. render de PNG de alta calidad para el PR) no tiene equivalente en batch puro en KLayout o Xschem. En ese caso Xvfb pasa de fallback a requerimiento y hay que documentarlo como tal, no esconderlo.
 
 **"pip install klayout para el 80% de operaciones"** deja de ser verdad si:
-- Una operación core de Miku (ej. DRC con reglas complejas de density) requiere el paquete del sistema porque el PyPI package tiene la funcionalidad incompleta. Verificar con un caso de uso real antes de asumir que PyPI es suficiente.
+- Una operación core de Riku (ej. DRC con reglas complejas de density) requiere el paquete del sistema porque el PyPI package tiene la funcionalidad incompleta. Verificar con un caso de uso real antes de asumir que PyPI es suficiente.
 
 **"Imagen Docker propia de ~400 MB"** no es mantenible si:
 - Las herramientas EDA cambian versiones frecuentemente y mantener la imagen actualizada consume tiempo desproporcionado. En ese caso, depender de IIC-OSIC-TOOLS o efabless y aceptar el tamaño mayor (~2GB) a cambio de no mantener la imagen.
@@ -739,19 +739,19 @@ def get_klayout_buddies_path() -> str | None:
 **"`DISPLAY` como variable central"** es frágil si:
 - Hay entornos donde `$DISPLAY` está seteado pero no hay display real (ej. algunas configuraciones de SSH con X11 forwarding mal configurado). En ese caso necesitamos un probe activo (`xdpyinfo`) en vez de confiar en la variable.
 
-## Decisiones de diseño para Miku
+## Decisiones de diseño para Riku
 
 1. **Modo batch puro como primer intento.** Antes de levantar Xvfb, intentar siempre el modo sin display de cada herramienta. Xvfb es el fallback, no el default.
 
-2. **`pip install klayout` para diff y XOR, paquete del sistema para PNG.** Documentar esta distinción claramente. El PyPI package es suficiente para el 80% de las operaciones de Miku.
+2. **`pip install klayout` para diff y XOR, paquete del sistema para PNG.** Documentar esta distinción claramente. El PyPI package es suficiente para el 80% de las operaciones de Riku.
 
 3. **Verificación de versiones lazy.** Detectar versiones al primer uso de cada herramienta, no al arrancar. Imprimir warnings accionables: qué versión está instalada, qué versión se necesita, cómo actualizar.
 
-4. **Imagen Docker propia pequeña (~400 MB comprimida).** No depender de la imagen de OpenLane (2+ GB). Publicarla en `ghcr.io` para que los usuarios de Miku puedan usarla directamente en GitHub Actions.
+4. **Imagen Docker propia pequeña (~400 MB comprimida).** No depender de la imagen de OpenLane (2+ GB). Publicarla en `ghcr.io` para que los usuarios de Riku puedan usarla directamente en GitHub Actions.
 
-5. **WSL2 como ciudadano de primera clase.** Las instrucciones de instalación para Windows apuntan a WSL2, no a los binarios nativos Windows de KLayout. Todos los scripts de Miku usan rutas Unix. La única excepción es el I/O warning: documentar que los archivos deben estar en el filesystem WSL2.
+5. **WSL2 como ciudadano de primera clase.** Las instrucciones de instalación para Windows apuntan a WSL2, no a los binarios nativos Windows de KLayout. Todos los scripts de Riku usan rutas Unix. La única excepción es el I/O warning: documentar que los archivos deben estar en el filesystem WSL2.
 
-6. **`DISPLAY` como variable central de decisión.** Si `$DISPLAY` no está seteado, Miku elige automáticamente el modo sin display de cada herramienta. Si está seteado, permite operaciones que requieren display (rendering PNG de alta calidad, diff visual de Xschem).
+6. **`DISPLAY` como variable central de decisión.** Si `$DISPLAY` no está seteado, Riku elige automáticamente el modo sin display de cada herramienta. Si está seteado, permite operaciones que requieren display (rendering PNG de alta calidad, diff visual de Xschem).
 
 ---
 

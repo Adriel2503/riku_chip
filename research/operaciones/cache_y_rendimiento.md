@@ -1,4 +1,4 @@
-# Caché y Rendimiento para Miku
+# Caché y Rendimiento para Riku
 
 ## 1. Operaciones costosas y tiempos reales
 
@@ -41,7 +41,7 @@
 
 ### Principio fundamental
 
-Toda operación costosa de Miku se puede modelar como función pura:
+Toda operación costosa de Riku se puede modelar como función pura:
 
 ```
 resultado = f(archivo_fuente, parámetros, versión_herramienta)
@@ -226,7 +226,7 @@ Para un equipo de 5 personas trabajando en chips SKY130, la caché remota de un 
 Usar presigned URLs de S3 para CI sin exponer credenciales permanentes:
 
 ```python
-# Miku genera un presigned URL válido 1 hora para descarga
+# Riku genera un presigned URL válido 1 hora para descarga
 url = s3.generate_presigned_url("get_object",
     Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600)
 ```
@@ -254,7 +254,7 @@ PDK (sky130A/libs.tech/)
 
 ### Invalidación por dependencia transitiva
 
-El problema crítico: si el PDK se actualiza (nueva versión de sky130A), todos los resultados de DRC y extracción son potencialmente inválidos. Miku necesita rastrear esto.
+El problema crítico: si el PDK se actualiza (nueva versión de sky130A), todos los resultados de DRC y extracción son potencialmente inválidos. Riku necesita rastrear esto.
 
 **Solución:** incluir el hash del PDK en la clave de caché.
 
@@ -393,7 +393,7 @@ Esto reduce el uso de RAM de O(tamaño GDS) a O(celda más grande), permitiendo 
 
 ### Estrategia 4: Procesar solo celdas modificadas
 
-Si Miku conoce qué celdas cambiaron entre commits (via diff estructural rápido de texto o `strmcmp`), puede evitar el XOR completo y hacer XOR solo sobre esas celdas:
+Si Riku conoce qué celdas cambiaron entre commits (via diff estructural rápido de texto o `strmcmp`), puede evitar el XOR completo y hacer XOR solo sobre esas celdas:
 
 ```python
 def targeted_xor(gds_a: Path, gds_b: Path, changed_cells: list[str]) -> Path:
@@ -490,7 +490,7 @@ ARTEFACTOS DE BUILD (NO en git):
   *.lyrdb    marker databases de KLayout
 ```
 
-**`.gitignore` recomendado para proyectos Miku:**
+**`.gitignore` recomendado para proyectos Riku:**
 
 ```gitignore
 # Artefactos de build EDA
@@ -508,7 +508,7 @@ ARTEFACTOS DE BUILD (NO en git):
 *.lyrdb
 *.lvsdb
 
-# Renderizados (van en caché Miku, no en git)
+# Renderizados (van en caché Riku, no en git)
 *.png
 *.svg
 *.pnm
@@ -525,7 +525,7 @@ extraction/
 El GDS del PDK (sky130A_fd_sc_hd*.gds, etc.) no se regenera — es un artefacto externo. Opciones:
 
 1. **Git LFS:** Para GDS del PDK en el repo. LFS guarda el binario fuera del packfile pero mantiene la referencia en git. `git lfs track "*.gds"` antes del primer commit del GDS.
-2. **No en el repo:** Que el PDK sea una dependencia externa declarada (como pip install). Miku puede tener un `miku.toml` con `pdk = "sky130A@1.0.136"` y descargarlo en el setup.
+2. **No en el repo:** Que el PDK sea una dependencia externa declarada (como pip install). Riku puede tener un `miku.toml` con `pdk = "sky130A@1.0.136"` y descargarlo en el setup.
 
 **Recomendación:** Opción 2 para PDKs públicos (sky130A, gf180). Opción 1 (Git LFS) para GDS propietarios o cerrados que el equipo necesita versionar.
 
@@ -552,7 +552,7 @@ La diferencia es de 2–3 órdenes de magnitud. **Un repo que incluye GDS genera
 
 ### Dónde SÍ guardar
 
-**Estructura de almacenamiento de Miku:**
+**Estructura de almacenamiento de Riku:**
 
 ```
 ~/.cache/miku/artifacts/
@@ -612,7 +612,7 @@ def compress_waveform(raw_path: Path, out_path: Path, signals_of_interest: list[
 
 ### Integración con interfaces web/PR
 
-Para mostrar diffs en PRs (similar a GitHub's rendering de STL/imágenes), Miku puede generar artefactos estandarizados y hospedarlos:
+Para mostrar diffs en PRs (similar a GitHub's rendering de STL/imágenes), Riku puede generar artefactos estandarizados y hospedarlos:
 
 ```
 PR #42 → trigger CI → miku diff HEAD~1..HEAD
@@ -694,7 +694,7 @@ La tabla de `.gitignore` ya incluye `*.ext`. Confirmación de práctica real: lo
 - El volumen de entradas de caché en uso real es menor de ~5k entradas. Con eso, un directorio con nombres de archivo como clave es suficiente y más simple. Solo mover a SQLite cuando haya evidencia de que el filesystem es el cuello de botella.
 
 **"S3 como caché L2"** no tiene sentido si:
-- El usuario inicial de Miku es un solo diseñador trabajando en local — el caché L2 compartido no le aporta nada y agrega complejidad de configuración. Solo implementar L2 cuando haya un equipo real que lo necesite.
+- El usuario inicial de Riku es un solo diseñador trabajando en local — el caché L2 compartido no le aporta nada y agrega complejidad de configuración. Solo implementar L2 cuando haya un equipo real que lo necesite.
 
 **"XOR selectivo por celdas"** puede ser insuficiente si:
 - Los cambios en un diseño real tienden a tocar la celda top (por ejemplo, al mover instancias). Si el 80% de los diffs en la práctica tocan la celda top, el XOR selectivo no aporta el speedup esperado y habría que pensar en otro enfoque (ej. diff de bounding boxes, diff de capas individuales).
@@ -718,7 +718,7 @@ S3 (o compatible: R2, MinIO) elimina la necesidad de mantener un servidor de cac
 
 ### Por qué no usar git-lfs para los artefactos de caché
 
-Git LFS está diseñado para artefactos que se versionan (tienen historia). Los artefactos de caché de Miku son derivados — no tienen historia propia, son funciones de sus inputs. Usar LFS los trataría como primeros ciudadanos del repo cuando son ciudadanos de segunda. Además, LFS no tiene eviction ni invalidación por contenido.
+Git LFS está diseñado para artefactos que se versionan (tienen historia). Los artefactos de caché de Riku son derivados — no tienen historia propia, son funciones de sus inputs. Usar LFS los trataría como primeros ciudadanos del repo cuando son ciudadanos de segunda. Además, LFS no tiene eviction ni invalidación por contenido.
 
 ### Por qué comprimir waveforms en lugar de guardar el .raw
 

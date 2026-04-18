@@ -1,8 +1,8 @@
-# Selección de Lenguaje y Stack para Miku
+# Selección de Lenguaje y Stack para Riku
 
 ## 1. Requisitos del sistema
 
-Miku necesita:
+Riku necesita:
 - Interfaz con KLayout (API Python/Ruby, core C++)
 - Interfaz con Xschem (Tcl, exporta SPICE)
 - Interfaz con NGSpice (CLI batch)
@@ -79,7 +79,7 @@ Miku necesita:
 
 **Git:** `go-git` es excelente (producción, usado por Gitea). Pero sin EDA libraries, habría que construir todo desde cero.
 
-**Veredicto:** No aplica para Miku.
+**Veredicto:** No aplica para Riku.
 
 ---
 
@@ -120,7 +120,7 @@ Nicho de simulación analógica (CedarSim.jl, con fondos DARPA). Sin parsers GDS
 
 ## 4. Recomendación: híbrido Python + Rust
 
-El patrón más sólido para Miku es el mismo que usa gdstk:  
+El patrón más sólido para Riku es el mismo que usa gdstk:  
 **Python en la superficie, Rust en el núcleo pesado.**
 
 ```
