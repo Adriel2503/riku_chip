@@ -1,0 +1,103 @@
+import hashlib
+import shutil
+import subprocess
+from pathlib import Path
+
+from riku.core.driver import RikuDriver, DriverInfo, DriverDiffReport, DiffEntry
+from riku.parsers.xschem import detect_format, parse
+from riku.core.semantic_diff import diff as semantic_diff
+
+CACHE_DIR = Path.home() / ".cache" / "riku" / "ops"
+
+
+class XschemDriver(RikuDriver):
+
+    def info(self) -> DriverInfo:
+        xschem = shutil.which("xschem")
+        if not xschem:
+            return DriverInfo(
+                name="xschem", available=False, version="",
+                extensions=[".sch"]
+            )
+        try:
+            result = subprocess.run(
+                [xschem, "--version"],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in (result.stdout + result.stderr).splitlines():
+                if "XSCHEM V" in line:
+                    return DriverInfo(
+                        name="xschem", available=True, version=line.strip(),
+                        extensions=[".sch"]
+                    )
+        except Exception:
+            pass
+        return DriverInfo(name="xschem", available=True, version="unknown", extensions=[".sch"])
+
+    def diff(self, content_a: bytes, content_b: bytes, path_hint: str = "") -> DriverDiffReport:
+        report = DriverDiffReport(file_type="xschem")
+
+        if detect_format(content_a) != "xschem":
+            report.warnings.append(f"{path_hint}: no es formato Xschem, usando diff de texto.")
+            return report
+
+        result = semantic_diff(content_a, content_b)
+
+        for cd in result.components:
+            report.changes.append(DiffEntry(
+                kind=cd.kind,
+                element=cd.name,
+                before=cd.before,
+                after=cd.after,
+            ))
+
+        for net in result.nets_added:
+            report.changes.append(DiffEntry(kind="added", element=f"net:{net}"))
+        for net in result.nets_removed:
+            report.changes.append(DiffEntry(kind="removed", element=f"net:{net}"))
+
+        if result.is_move_all:
+            report.changes.append(DiffEntry(
+                kind="modified", element="layout",
+                cosmetic=True,
+                after={"note": "reorganizacion cosmetica (Move All)"}
+            ))
+
+        return report
+
+    def normalize(self, content: bytes, path_hint: str = "") -> bytes:
+        # .sch no tiene timestamps ni ruido que normalizar — retornar tal cual
+        return content
+
+    def render(self, content: bytes, path_hint: str = "") -> Path | None:
+        xschem = shutil.which("xschem")
+        if not xschem:
+            return None
+
+        info = self.info()
+        key = hashlib.sha256(f"{info.version}::{content.hex()}".encode()).hexdigest()
+        cached = CACHE_DIR / key / "render.svg"
+
+        if cached.exists():
+            return cached
+
+        cached.parent.mkdir(parents=True, exist_ok=True)
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".sch", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+
+        try:
+            cmd = (
+                f"{xschem} "
+                f'--tcl "wm iconify ." '
+                f'--command "xschem zoom_full; xschem toggle_colorscheme; xschem print svg {cached}" '
+                f'--quit {tmp_path}'
+            )
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=30)
+            return cached if cached.exists() else None
+        except Exception:
+            return None
+        finally:
+            tmp_path.unlink(missing_ok=True)
