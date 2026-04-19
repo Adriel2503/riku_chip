@@ -1,11 +1,19 @@
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+import json
 import typer
+from enum import Enum
 from typing import Optional
 from pathlib import Path
 
 app = typer.Typer(help="Riku - VCS semantico para diseno de chips.")
+
+
+class Format(str, Enum):
+    text = "text"
+    json = "json"
+    visual = "visual"
 
 
 @app.command()
@@ -14,15 +22,27 @@ def diff(
     commit_b: str = typer.Argument(..., help="Commit destino (mas nuevo)"),
     file_path: str = typer.Argument(..., help="Ruta al archivo dentro del repo"),
     repo: str = typer.Option(".", "--repo", "-r", help="Ruta al repositorio Git"),
+    fmt: Format = typer.Option(Format.text, "--format", "-f", help="Formato de salida: text, json, visual"),
 ):
     """Muestra los cambios semanticos de un archivo entre dos commits."""
     from riku.core.analyzer import analyze_diff
+    from riku.core.git_service import GitService
+    from riku.core.registry import get_driver_for
 
     report = analyze_diff(repo, commit_a, commit_b, file_path)
 
     for w in report.warnings:
         typer.echo(f"[!] {w}", err=True)
 
+    if fmt == Format.json:
+        _output_json(report)
+        return
+
+    if fmt == Format.visual:
+        _output_visual(repo, commit_b, file_path, report)
+        return
+
+    # text (default)
     if report.is_empty():
         typer.echo("Sin cambios semanticos.")
         return
@@ -36,14 +56,88 @@ def diff(
         typer.echo(f"  {change.kind:<10} {change.element}{cosmetic}")
 
 
+def _output_json(report):
+    from riku.core.driver import DriverDiffReport
+    data = {
+        "file_type": report.file_type,
+        "warnings": report.warnings,
+        "changes": [
+            {
+                "kind": c.kind,
+                "element": c.element,
+                "cosmetic": c.cosmetic,
+                "before": c.before,
+                "after": c.after,
+            }
+            for c in report.changes
+        ],
+    }
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _output_visual(repo: str, commit_b: str, file_path: str, report):
+    import tempfile, subprocess, os
+    from riku.core.git_service import GitService
+    from riku.core.registry import get_driver_for
+    from riku.core.models import DiffReport, ComponentDiff
+    from riku.core.svg_annotator import annotate
+    from riku.parsers.xschem import parse
+
+    svc = GitService(repo)
+    driver = get_driver_for(file_path)
+
+    if driver is None:
+        typer.echo("[!] No hay driver visual para este formato.", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        content_b = svc.get_blob(commit_b, file_path)
+    except KeyError:
+        typer.echo(f"[!] {file_path} no existe en {commit_b[:7]}.", err=True)
+        raise typer.Exit(code=1)
+
+    svg_path = driver.render(content_b, file_path)
+    if svg_path is None:
+        typer.echo("[!] Render no disponible (herramienta EDA no instalada).", err=True)
+        raise typer.Exit(code=1)
+
+    schematic = parse(content_b)
+    diff_report = DiffReport(
+        components=[
+            ComponentDiff(name=c.element, kind=c.kind)
+            for c in report.changes
+            if not c.element.startswith("net:")
+        ]
+    )
+
+    svg_content = svg_path.read_text(encoding="utf-8", errors="replace")
+    annotated = annotate(svg_content, schematic, diff_report)
+
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+        f.write(annotated.encode("utf-8"))
+        out = f.name
+
+    typer.echo(f"SVG anotado: {out}")
+
+    # Abrir en el visor del sistema
+    if sys.platform == "win32":
+        os.startfile(out)
+    elif sys.platform == "darwin":
+        subprocess.run(["open", out])
+    else:
+        subprocess.run(["xdg-open", out])
+
+
 @app.command()
 def log(
     file_path: Optional[str] = typer.Argument(None, help="Filtrar por archivo (opcional)"),
     repo: str = typer.Option(".", "--repo", "-r", help="Ruta al repositorio Git"),
     limit: int = typer.Option(20, "--limit", "-n", help="Maximo de commits a mostrar"),
+    semantic: bool = typer.Option(False, "--semantic", "-s", help="Mostrar resumen semantico por commit"),
 ):
     """Lista el historial de commits, opcionalmente filtrado por archivo."""
     from riku.core.git_service import GitService
+    from riku.core.analyzer import analyze_diff
 
     svc = GitService(repo)
     commits = svc.get_commits(file_path)[:limit]
@@ -52,8 +146,23 @@ def log(
         typer.echo("Sin commits encontrados.")
         return
 
-    for c in commits:
+    for i, c in enumerate(commits):
         typer.echo(f"{c.short_id}  {c.author:<20}  {c.message[:60]}")
+
+        if semantic and file_path and i + 1 < len(commits):
+            try:
+                report = analyze_diff(repo, commits[i + 1].oid, c.oid, file_path)
+                if not report.is_empty():
+                    added = sum(1 for ch in report.changes if ch.kind == "added" and not ch.cosmetic)
+                    removed = sum(1 for ch in report.changes if ch.kind == "removed" and not ch.cosmetic)
+                    modified = sum(1 for ch in report.changes if ch.kind == "modified" and not ch.cosmetic)
+                    parts = []
+                    if added:   parts.append(f"+{added}")
+                    if removed: parts.append(f"-{removed}")
+                    if modified: parts.append(f"~{modified}")
+                    typer.echo(f"           {'  '.join(parts)}")
+            except Exception:
+                pass
 
 
 @app.command()
