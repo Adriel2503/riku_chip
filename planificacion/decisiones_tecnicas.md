@@ -76,6 +76,45 @@ def analyze_diff(repo_path, commit_a, commit_b, file_path) -> DriverDiffReport
 
 ---
 
+## CLI — Typer vs Click
+
+**Decisión:** usar Typer como framework de CLI.
+
+**Por qué:**
+- Typer es un wrapper de Click que usa type hints de Python para inferir argumentos — menos boilerplate para los mismos 3 comandos.
+- Internamente es Click: si en el futuro se necesita control fino, el acceso está disponible.
+- Viene con Rich integrado, útil cuando se implemente output con colores.
+- ~16M descargas semanales, mantenido por el autor de FastAPI — riesgo de abandono bajo.
+
+**Trade-off aceptado:** añade Rich como dependencia transitiva. Aceptable porque Rich será útil en la fase de output de CLI.
+
+**Eficiencia:** idéntica a Click — el overhead de parseo de argumentos es microsegundos vs el trabajo real del backend.
+
+---
+
+## Encoding en CLI — doble filtro
+
+**Decisión:** dos capas de protección contra `UnicodeEncodeError` en Windows (cp1252):
+
+1. **Primera capa:** eliminar caracteres no soportados por cp1252 del código fuente — `—` → `-`, `✓`/`✗` → `[ok]`/`[x]`. Elimina el problema de raíz.
+2. **Segunda capa:** `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` al inicio de `cli.py`. Red de seguridad para cualquier carácter no-ASCII que se cuele en el futuro.
+
+**Por qué este orden:** primero resolver la causa, luego agregar protección. `errors="replace"` como último recurso sustituye caracteres por `?` en lugar de lanzar excepción — nunca falla, pero puede degradar output.
+
+**En Linux/Docker:** cp1252 no existe, UTF-8 es el default. El `reconfigure` es no-op en esos entornos.
+
+---
+
+## Archivo nuevo o borrado en `analyze_diff`
+
+**Decisión:** si el archivo no existe en `commit_a` o `commit_b`, `_safe_get_blob()` retorna `b""` en lugar de propagar `KeyError`.
+
+**Por qué:** un archivo nuevo es un caso válido, no un error — el driver lo interpreta correctamente como todos los componentes `added`. Lanzar excepción forzaría al caller a manejar un caso que semánticamente no es un error.
+
+**Consecuencia:** `XschemDriver.diff(b"", content_b)` retorna todos los componentes de B como `added`. `diff(content_a, b"")` retorna todos como `removed`.
+
+---
+
 ## Blobs grandes (>50MB) — escritura a `.riku/tmp/`
 
 **Decisión:** si un blob supera 50MB, `GitService.get_blob()` lo escribe a `.riku/tmp/<short_id>_<filename>` y lanza `LargeBlobError` con la ruta.
