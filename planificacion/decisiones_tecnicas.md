@@ -115,6 +115,66 @@ def analyze_diff(repo_path, commit_a, commit_b, file_path) -> DriverDiffReport
 
 ---
 
+## Diff visual — Opción B (bounding boxes por coordenadas)
+
+**Decisión:** el diff visual superpone bounding boxes de color sobre el SVG de Xschem, centrados en las coordenadas del componente. No se genera un diff pixel a pixel ni se parsea la geometría del símbolo.
+
+**Opciones evaluadas:**
+- A — superposición de SVGs (rojo + verde translúcido): confuso con muchos cambios, descartada.
+- B — bounding boxes por coordenadas: factible con datos ya disponibles, elegida.
+- C — parsear geometría del SVG: frágil ante cambios de Xschem, descartada para MVP.
+
+**Por qué B:** el parser ya guarda `x, y` de cada componente. La transformación `.sch → SVG` es lineal y resoluble con mínimos cuadrados usando los nombres de componentes visibles en ambos lados.
+
+**Limitación aceptada:** el box se centra en el texto del nombre del componente, no encierra el símbolo completo. Es suficiente para identificar visualmente qué cambió.
+
+**Colores:** verde = added, rojo = removed, amarillo = modified.
+
+---
+
+## Transformacion de coordenadas .sch → SVG
+
+**Hallazgo:** la transformación de Xschem es `svg = mooz * sch + offset`, donde `mooz` depende del zoom al momento del export. No es un factor fijo.
+
+**Solución:** calcular `mooz` y los offsets empíricamente por mínimos cuadrados, cruzando los nombres de componentes que aparecen en el SVG (`<text fill="#cccccc">`) con sus coordenadas en el `Schematic` parseado. Requiere al menos 2 puntos.
+
+**Resultado medido:** con `zoom_full` y viewport 900×532, `mooz ≈ 0.674`. Error de predicción: ~7px en X, ~3px en Y — dentro del radio del bounding box.
+
+**Implementado en:** `riku/core/svg_annotator.py`, función `_fit_transform()`.
+
+---
+
+## Fix parser xschem.py — atributos multilinea
+
+**Fix aplicado:** commit `dec26b6`
+
+**Problema:** el regex original `[^}]*` no cruzaba líneas. Componentes con atributos multilinea como:
+```
+C {pfet.sym} 550 -400 0 1 {name=M1
+L=\{l1\}
+W=\{w1\}}
+```
+no eran parseados — el nombre `M1` no se extraía y el componente se ignoraba silenciosamente.
+
+**Fix:** agregar flags `re.MULTILINE | re.DOTALL` al regex de componentes y usar `finditer()` sobre el texto completo en lugar de iterar línea por línea.
+
+**Impacto:** el parser ahora captura todos los componentes de diseños reales sky130, que usan atributos multilínea extensamente.
+
+---
+
+## Formatos de salida CLI — text, json, visual
+
+**Decisión:** `riku diff` soporta tres formatos via `--format`:
+- `text` — salida legible por humanos, default.
+- `json` — `DriverDiffReport` serializado, para scripts y CI.
+- `visual` — genera SVG anotado y lo abre en el visor del sistema.
+
+**Por qué tres formatos:** cada contexto de uso requiere un formato distinto. Un ingeniero en terminal quiere texto; un script de CI quiere JSON parseble; una revisión de diseño quiere el SVG.
+
+**`riku log --semantic`:** agrega un resumen `+N -N ~N` de cambios semánticos por commit, comparando cada commit con el anterior. Solo disponible cuando se filtra por archivo.
+
+---
+
 ## Blobs grandes (>50MB) — escritura a `.riku/tmp/`
 
 **Decisión:** si un blob supera 50MB, `GitService.get_blob()` lo escribe a `.riku/tmp/<short_id>_<filename>` y lanza `LargeBlobError` con la ruta.
