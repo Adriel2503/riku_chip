@@ -77,21 +77,43 @@ Un módulo se migra a Rust cuando se cumplen **las tres condiciones** simultáne
 **Módulo:** `parsers/xschem.py`
 **Umbral de migración:** parsear un `.sch` tarda > 100 ms, medido en esquemáticos reales grandes.
 
-**Por qué ocurre:** los archivos `.sch` son texto plano < 1 MB típicamente. Este caso es prácticamente imposible.
+**Medido (bench_parser.py, 2026-04-19):**
+- inv.sch (1.3 KB, 4 comps): 0.16ms
+- multiplicador gilbert (7.5 KB, 17 comps): 1.08ms
+- user_analog_project_wrapper (7.7 KB, 66 comps): 0.89ms
+- Sintetico 1000 comps multiline (72 KB): 6.9ms — lineal, ~7µs/comp
+- Sintetico 2000 comps (145 KB): 14ms
 
-**Condición de refutación:** casi certeza. Los `.sch` son demasiado pequeños para que Python sea un cuello de botella aquí. **Este caso no se migrará.**
+**Conclusión:** el umbral de 100ms requeriría un `.sch` de ~14,000 componentes (~2MB). No existe en la práctica. **Este caso no se migrará.**
 
 ---
 
-## Resumen de prioridades
+### Caso 6 — `riku log --semantic` con historial largo
+**Módulo:** `cli.py` + `analyzer.py` + `parsers/xschem.py`
+**Umbral de migración:** `riku log --semantic --limit 100` sobre un .sch con ~50 componentes tarda > 10s.
 
-| Caso | Probabilidad de migrar | Impacto si se migra | Complejidad |
-|---|---|---|---|
-| Parser GDS streaming | Alta | Crítico — desbloquea chips reales | Media |
-| Parser `.raw` NGSpice | Media | Alto — simulaciones grandes | Media |
-| Motor XOR geométrico | Media | Alto — CI lento | Alta |
-| GitService | Baja | Bajo — ya es C por debajo | Alta |
-| Parser `.sch` | Ninguna | Ninguno | — |
+**Medido (bench_log_semantic.py, 2026-04-19):**
+- 20 commits, 50 comps: 717ms total, ~38ms/diff
+- Proyección a 100 commits: ~3.8s
+
+**Cuello de botella real:** parseo Python (~15ms x 2 por diff) + overhead de GitService (~2ms/blob). No es un cuello de botella de algoritmo — es latencia acumulada.
+
+**Solución correcta antes de Rust:** lazy evaluation (imprimir cada commit al calcularlo, parar al límite visible) + ThreadPoolExecutor con 4 workers. Estos dos cambios llevan el caso de 100 commits a <1s sin tocar Rust.
+
+**Condición para Rust:** si después de lazy + paralelismo el tiempo sigue siendo > 5s en uso real. No se ha llegado a esa condición.
+
+---
+
+## Resumen de prioridades (actualizado 2026-04-19)
+
+| Caso | Probabilidad de migrar | Impacto si se migra | Complejidad | Estado |
+|---|---|---|---|---|
+| Parser GDS streaming | Alta | Crítico — desbloquea chips reales | Media | Sin medir aun |
+| Parser `.raw` NGSpice | Media | Alto — simulaciones grandes | Media | Sin medir aun |
+| Motor XOR geométrico | Media | Alto — CI lento | Alta | Sin medir aun |
+| log --semantic lento | Baja | Medio — UX degradada | Baja | Resolver con lazy + threads primero |
+| GitService | Muy baja | Bajo — ya es C por debajo | Alta | pygit2 mide 1.4ms/blob |
+| Parser `.sch` | Ninguna | Ninguno | — | Refutado por benchmark |
 
 ---
 
