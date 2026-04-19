@@ -1,6 +1,9 @@
 klayout/
 .claude/
 tinytapeout_gds_viewer/
+Layout21/
+gdsdk/
+gdstk/
 
 # Local config
 .gitignore
