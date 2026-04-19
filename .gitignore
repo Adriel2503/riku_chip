@@ -4,3 +4,16 @@ tinytapeout_gds_viewer/
 
 # Local config
 .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Riku runtime
+.riku/tmp/
+*.svg
+*.png
