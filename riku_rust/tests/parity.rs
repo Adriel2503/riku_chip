@@ -53,7 +53,10 @@ fn run_python(args: &[&str], cwd: &Path) -> Option<CmdResult> {
 }
 
 fn normalize(s: &str) -> String {
-    s.replace("\r\n", "\n").trim_end().to_string()
+    s.replace("\r\n", "\n")
+        .replace('\\', "/")
+        .trim_end()
+        .to_string()
 }
 
 fn python_available() -> bool {

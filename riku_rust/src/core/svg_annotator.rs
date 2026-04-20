@@ -347,7 +347,6 @@ pub fn annotate(
     };
 
     let mut elements = Vec::new();
-    let _exact = transform.exact;
 
     for cd in &diff_report.components {
         let source = if cd.kind == crate::core::models::ChangeKind::Removed {

@@ -191,16 +191,18 @@ impl RikuDriver for XschemDriver {
         std::io::Write::write_all(&mut tmp, content).ok()?;
         let tmp_path = tmp.into_temp_path();
 
-        let command = format!(
+        let tcl_command = format!(
             "xschem zoom_full; set _f [open $env(RIKU_ORIGINS_PATH) w]; puts $_f [xschem get xorigin]; puts $_f [xschem get yorigin]; close $_f; xschem print svg {}",
             cached.display()
         );
 
-        let status = Command::new(xschem)
+        // --tcl recibe codigo TCL inline (no un archivo); sin shell=True no hay
+        // interpretacion de $ por bash, asi que RIKU_ORIGINS_PATH llega intacto a TCL.
+        let status = Command::new(&xschem)
             .arg("--tcl")
             .arg("wm iconify .")
             .arg("--command")
-            .arg(command)
+            .arg(&tcl_command)
             .arg("--quit")
             .arg(tmp_path.as_os_str())
             .env("RIKU_ORIGINS_PATH", &origins_path)
