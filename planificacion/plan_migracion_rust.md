@@ -1,77 +1,71 @@
-# Plan Maestro de Migración a Rust
+# Migración a Rust — Estado y Hoja de Ruta
 
-## Resumen
-Migrar `riku` desde Python a Rust en `C:\Users\ariel\Documents\riku_chip\riku_rust`, usando una arquitectura de **monolito modular + hexagonal** y estilo **clean code**. La migración se hará por fases, con paridad funcional primero y optimización/integración completa después. La integración con [`gdstk/rust`](C:\Users\ariel\Documents\riku_chip\gdstk\rust) quedará para el final.
+## Estado por fase (2026-04-20)
 
-## Fases
+| Fase | Descripción | Estado |
+|------|-------------|--------|
+| 1 | Base del proyecto — crate, dependencias, estructura | ✅ completo |
+| 2 | Tipos y contratos — modelos, traits, ports | ✅ completo |
+| 3 | Capa Git — blobs, commits, historial con git2 | ✅ completo |
+| 4 | Parser de Xschem — componentes, wires, nets | ✅ completo |
+| 5 | Diff semántico — added/removed/modified/Move All | ✅ completo |
+| 6 | CLI — diff, log, doctor, salidas text/json/visual | ✅ completo |
+| 7 | Render y anotación SVG — caché, coordenadas, mooz | ✅ completo |
+| 8 | Paridad con Python — tests comparativos | ✅ completo |
+| 9 | Integración con gdstk/rust | ⏳ pendiente |
 
-### Fase 1: Base del proyecto
-- Crate Rust creado y compilando.
-- Dependencias base definidas y actualizadas.
-- Estructura modular inicial establecida.
-- Reglas de implementación y estilo definidas.
+## Lo que está implementado
 
-### Fase 2: Tipos y contratos
-- Migrar modelos de dominio.
-- Definir traits/puertos para Git, parser, renderer y drivers.
-- Mantener el núcleo independiente de CLI e infraestructura.
+- **CLI**: `riku diff`, `riku log`, `riku doctor` con salidas `text`, `json` y `visual`
+- **Parser**: `.sch` de Xschem — componentes, wires, nets, propiedades
+- **Diff semántico**: detecta Added/Removed/Modified, redes, Move All cosmético
+- **Git**: lectura de blobs y commits con `git2` sin modificar el working tree
+- **Render**: invoca `xschem` como proceso externo, caché por SHA256
+- **SVG annotator**: transforma coordenadas esquemático→SVG con mooz calibrado desde endpoints de wires
+- **Parity tests**: `tests/parity.rs` ejecuta Python y Rust y compara JSON
 
-### Fase 3: Capa Git
-- Implementar lectura de blobs, commits y cambios con `git2`.
-- Mantener la regla de no modificar el working tree.
+## Dependencias activas
 
-### Fase 4: Parser de Xschem
-- Reescribir el parser de `.sch` en Rust.
-- Detectar componentes, wires, nets y formato básico.
-- Agregar tests con archivos reales.
+`clap`, `dirs`, `git2`, `regex`, `serde`, `serde_json`, `sha2`, `tempfile`, `thiserror`, `which`
 
-### Fase 5: Diff semántico
-- Migrar la comparación semántica.
-- Detectar componentes y nets agregadas/eliminadas/modificadas.
-- Identificar cambios cosméticos como `Move All`.
+## Pendiente
 
-### Fase 6: CLI
-- Implementar `diff`, `log` y `doctor`.
-- Soportar salida texto, JSON y visual.
+- **Fase 9**: integración con `gdstk/rust`
+  - Decidir si workspace compartido, dependencia local o API
+  - No acoplar hasta cerrar cualquier deuda de paridad
 
-### Fase 7: Render y anotación visual
-- Integrar `xschem` como herramienta externa.
-- Portar la anotación SVG.
-- Cachear renders y validar precisión de coordenadas.
+- **Deuda técnica menor**:
+  - Tests de integración reales con `#[test]` y assets en vez de scripts manuales
+  - Stress test con GDS >200 MB (criterio original de fase 1, nunca validado)
+  - Retiro formal del núcleo Python (cuando paridad sea total y equipo lo decida)
 
-### Fase 8: Paridad completa con Python
-- Comparar resultados de Rust contra `riku/`.
-- Ajustar diferencias de parseo, diff y visualización.
-- Definir si Python queda como wrapper o legado.
+## Arquitectura de referencia
 
-### Fase 9: Integración con `gdstk/rust`
-- Conectar `riku_rust` con [`gdstk/rust`](C:\Users\ariel\Documents\riku_chip\gdstk\rust).
-- Definir si la integración será por workspace, dependencia local o API compartida.
-- Evitar acoplar antes de cerrar la paridad principal.
+```
+riku_rust/
+  src/
+    main.rs
+    cli.rs                  ← clap, subcomandos
+    core/
+      models.rs             ← tipos de dominio
+      ports.rs              ← traits GitRepository, etc.
+      driver.rs             ← trait RikuDriver, DriverDiffReport
+      registry.rs           ← get_drivers(), get_driver_for()
+      git_service.rs        ← impl git2
+      analyzer.rs           ← analyze_diff()
+      semantic_diff.rs      ← diff semántico
+      svg_annotator.rs      ← annotate(), Transform, mooz
+    adapters/
+      xschem_driver.rs      ← impl RikuDriver para xschem
+    parsers/
+      xschem.rs             ← parse(), detect_format()
+  tests/
+    parity.rs               ← comparación Python vs Rust
+```
 
-## Dependencias actuales
-- `clap`
-- `dirs`
-- `git2`
-- `once_cell`
-- `regex`
-- `serde`
-- `serde_json`
-- `sha2`
-- `tempfile`
-- `thiserror`
-- `which`
+## Notas de coordinación
 
-## Criterios de aceptación
-- `riku_rust` compila y pasa tests.
-- `diff` y `log` funcionan con Xschem.
-- El modo visual genera SVG anotado.
-- La paridad funcional con Python se acerca o se alcanza.
-- La integración con `gdstk/rust` queda preparada para la fase final.
-
-## Suposiciones
-- `riku_rust` es el núcleo principal.
-- `xschem` sigue siendo dependencia externa para render visual.
-- La migración es incremental.
-- Se prioriza reproducibilidad y claridad por encima de reescritura agresiva.
-
+- `xschem` se invoca con `--tcl` + `--command` (TCL inline, no archivo)
+- `RIKU_ORIGINS_PATH` se pasa vía env al proceso xschem; TCL lo lee con `$env(...)`
+- En Docker, xschem está en `/foss/tools/bin/`; el PATH minimal de `docker exec` no lo incluye — es esperado
+- `mooz` se calibra desde endpoints de wires SVG (paths `MxLy`), no desde posiciones tipográficas de texto
