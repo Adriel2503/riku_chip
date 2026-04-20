@@ -201,7 +201,7 @@ fn open_file(path: &std::path::Path) -> Result<(), String> {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":1".to_string());
+        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
         let status = Command::new("xdg-open")
             .env("DISPLAY", &display)
             .arg(path)
