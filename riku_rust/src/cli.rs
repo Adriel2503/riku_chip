@@ -201,14 +201,19 @@ fn open_file(path: &std::path::Path) -> Result<(), String> {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
+        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":1".to_string());
         let status = Command::new("xdg-open")
+            .env("DISPLAY", &display)
             .arg(path)
             .status()
             .map_err(|e| e.to_string())?;
         if status.success() {
             return Ok(());
         }
-        Err("No se pudo abrir el archivo con xdg-open.".to_string())
+        // Fallback: imprimir la ruta para que el usuario la abra manualmente
+        eprintln!("[!] No se pudo abrir el SVG automaticamente.");
+        eprintln!("    Abrelo manualmente: {}", path.display());
+        Ok(())
     }
 }
 
