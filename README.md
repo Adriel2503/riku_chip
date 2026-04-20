@@ -78,3 +78,4 @@ research/
 - [Checklist corto](planificacion/plan_migracion_rust_checklist.md)
 - [Índice por fases](planificacion/plan_migracion_rust_indice.md)
 - [Futuro del CLI](planificacion/cli_futuro.md)
+- [Historial de conversación](planificacion/historial_conversacion.md)
