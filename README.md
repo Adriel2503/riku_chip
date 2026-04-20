@@ -71,3 +71,9 @@ research/
 - `pygit2` — acceso a objetos Git (1.4ms/blob, sin fork de proceso)
 - `typer` — CLI con type hints
 - `xschem` (externo, en PATH) — render SVG headless
+
+## Migración A Rust
+
+- [Plan maestro](planificacion/plan_migracion_rust.md)
+- [Checklist corto](planificacion/plan_migracion_rust_checklist.md)
+- [Índice por fases](planificacion/plan_migracion_rust_indice.md)

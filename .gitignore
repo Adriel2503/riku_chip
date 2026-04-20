@@ -19,3 +19,6 @@ build/
 # Riku runtime
 .riku/tmp/
 *.svg
+
+# Rust build artifacts
+/riku_rust/target/

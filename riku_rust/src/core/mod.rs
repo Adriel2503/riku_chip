@@ -1,0 +1,9 @@
+pub mod error;
+pub mod analyzer;
+pub mod driver;
+pub mod git_service;
+pub mod models;
+pub mod ports;
+pub mod registry;
+pub mod semantic_diff;
+pub mod svg_annotator;
