@@ -99,51 +99,91 @@ _COLORS = {
     "modified": ("rgba(255,180,0,0.25)", "rgba(255,180,0,0.8)"),
 }
 
+_WIRE_STROKE = {
+    "added":   "rgba(0,200,0,0.9)",
+    "removed": "rgba(200,0,0,0.9)",
+}
+_WIRE_WIDTH = 2.5
+
+
+def _wire_elements(wires, net_names: set[str], kind: str, transform: _Transform) -> list[str]:
+    """Genera elementos <line> SVG para todos los wires que pertenecen a alguna net del set."""
+    stroke = _WIRE_STROKE[kind]
+    elements = []
+    for w in wires:
+        if w.label not in net_names:
+            continue
+        x1, y1 = transform.to_svg(w.x1, w.y1)
+        x2, y2 = transform.to_svg(w.x2, w.y2)
+        elements.append(
+            f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+            f'stroke="{stroke}" stroke-width="{_WIRE_WIDTH}" stroke-linecap="round"/>'
+        )
+    return elements
+
 
 def annotate(
     svg_content: str,
-    schematic: Schematic,
+    sch_b: Schematic,
     diff_report: DiffReport,
+    sch_a: Schematic | None = None,
 ) -> str:
     """
-    Recibe el SVG de Xschem, el Schematic parseado y el DiffReport.
-    Retorna el SVG con bounding boxes de color sobre los componentes cambiados.
+    Recibe el SVG del commit B, los Schematics de ambos commits y el DiffReport.
+    Retorna el SVG con:
+    - Bounding boxes sobre componentes cambiados (added/removed/modified)
+    - Trayectos de wires para nets añadidas (verde) y eliminadas (rojo)
+
+    sch_a es opcional — si no se provee, las nets eliminadas no se dibujan.
     Si no se puede calcular la transformacion, retorna el SVG sin modificar.
     """
     svg_positions = _extract_name_positions(svg_content)
-    transform = _fit_transform(svg_positions, schematic)
+    transform = _fit_transform(svg_positions, sch_b)
 
     if transform is None:
         return svg_content
 
-    # Extraer width/height del SVG para el viewBox
-    wh = re.search(r'width="([0-9.]+)" height="([0-9.]+)"', svg_content)
-    svg_w = float(wh.group(1)) if wh else 900
-    svg_h = float(wh.group(2)) if wh else 532
-
-    boxes = []
+    elements = []
     half = _BBOX_HALF * transform.mooz
 
+    # --- bounding boxes de componentes ---
     for cd in diff_report.components:
-        if cd.name not in schematic.components:
-            continue
-        comp = schematic.components[cd.name]
-        cx, cy = transform.to_svg(comp.x, comp.y)
+        # componentes added/modified usan sch_b; removed usan sch_a si disponible
+        if cd.kind == "removed":
+            source = sch_a if sch_a is not None else sch_b
+        else:
+            source = sch_b
 
+        if cd.name not in source.components:
+            continue
+        comp = source.components[cd.name]
+        cx, cy = transform.to_svg(comp.x, comp.y)
         fill, stroke = _COLORS.get(cd.kind, _COLORS["modified"])
-        boxes.append(
+        elements.append(
             f'<rect x="{cx - half:.2f}" y="{cy - half:.2f}" '
             f'width="{2*half:.2f}" height="{2*half:.2f}" '
             f'fill="{fill}" stroke="{stroke}" stroke-width="1.5" '
             f'rx="3" ry="3"/>'
         )
 
-    if not boxes:
+    # --- trayectos de wires de nets añadidas (en sch_b) ---
+    if diff_report.nets_added:
+        elements.extend(_wire_elements(
+            sch_b.wires, set(diff_report.nets_added), "added", transform
+        ))
+
+    # --- trayectos de wires de nets eliminadas (en sch_a) ---
+    if diff_report.nets_removed and sch_a is not None:
+        elements.extend(_wire_elements(
+            sch_a.wires, set(diff_report.nets_removed), "removed", transform
+        ))
+
+    if not elements:
         return svg_content
 
     annotation_layer = (
         '\n<g id="riku-diff-annotations">\n'
-        + "\n".join(boxes)
+        + "\n".join(elements)
         + "\n</g>\n"
     )
 

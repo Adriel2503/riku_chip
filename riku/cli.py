@@ -39,7 +39,7 @@ def diff(
         return
 
     if fmt == Format.visual:
-        _output_visual(repo, commit_b, file_path, report)
+        _output_visual(repo, commit_a, commit_b, file_path, report)
         return
 
     # text (default)
@@ -75,7 +75,7 @@ def _output_json(report):
     typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def _output_visual(repo: str, commit_b: str, file_path: str, report):
+def _output_visual(repo: str, commit_a: str, commit_b: str, file_path: str, report):
     import tempfile, subprocess, os
     from riku.core.git_service import GitService
     from riku.core.registry import get_driver_for
@@ -101,17 +101,26 @@ def _output_visual(repo: str, commit_b: str, file_path: str, report):
         typer.echo("[!] Render no disponible (herramienta EDA no instalada).", err=True)
         raise typer.Exit(code=1)
 
-    schematic = parse(content_b)
+    sch_b = parse(content_b)
+
+    try:
+        content_a = svc.get_blob(commit_a, file_path)
+        sch_a = parse(content_a)
+    except KeyError:
+        sch_a = None
+
     diff_report = DiffReport(
         components=[
             ComponentDiff(name=c.element, kind=c.kind)
             for c in report.changes
             if not c.element.startswith("net:")
-        ]
+        ],
+        nets_added=[c.element[4:] for c in report.changes if c.kind == "added"   and c.element.startswith("net:")],
+        nets_removed=[c.element[4:] for c in report.changes if c.kind == "removed" and c.element.startswith("net:")],
     )
 
     svg_content = svg_path.read_text(encoding="utf-8", errors="replace")
-    annotated = annotate(svg_content, schematic, diff_report)
+    annotated = annotate(svg_content, sch_b, diff_report, sch_a=sch_a)
 
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
         f.write(annotated.encode("utf-8"))
