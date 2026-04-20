@@ -24,6 +24,7 @@ struct Transform {
     mooz: f64,
     offset_x: f64,
     offset_y: f64,
+    #[allow(dead_code)] // reservado para logging/debug del transform
     exact: bool,
 }
 
