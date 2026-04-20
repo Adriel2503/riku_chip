@@ -182,3 +182,42 @@ no eran parseados — el nombre `M1` no se extraía y el componente se ignoraba 
 **Por qué:** cargar un GDS de 200MB en RAM de Python para luego pasárselo a KLayout (que también lo cargará) duplica el uso de memoria innecesariamente. El caller puede decidir si usar la ruta del archivo temporal o ignorar el error.
 
 **Threshold:** 50MB — valor conservador que cubre todos los .sch y la mayoría de .gds pequeños, pero protege contra GDS de chips completos.
+
+---
+
+## Render SVG — sin toggle_colorscheme
+
+**Fix aplicado:** commit `93ac2c0`
+
+**Problema:** el comando TCL incluía `xschem toggle_colorscheme` para forzar fondo blanco. Esto cambiaba el color de los textos de nombres de componentes de `#cccccc` a `#222222`, haciendo que `_extract_name_positions()` no encontrara ningún nombre (0 posiciones).
+
+**Fix:** eliminar `toggle_colorscheme` del comando de render. El SVG queda con el colorscheme por defecto de Xschem, que incluye `#cccccc` para nombres de instancia.
+
+---
+
+## Env var para path TCL — RIKU_ORIGINS_PATH
+
+**Fix aplicado:** commit `93ac2c0`
+
+**Problema:** interpolar la ruta del archivo `origins.txt` directamente en el string TCL con `shell=True` causaba que el shell interpretara `$` como variable de shell (PID en bash), corrompiendo la ruta.
+
+**Fix:** pasar la ruta vía variable de entorno `RIKU_ORIGINS_PATH` y accederla desde TCL como `$env(RIKU_ORIGINS_PATH)`. Esto es la forma estándar de pasar datos al intérprete TCL sin problemas de escape.
+
+```python
+env = {**os.environ, "RIKU_ORIGINS_PATH": str(origins_path)}
+# TCL: set _f [open $env(RIKU_ORIGINS_PATH) w]
+```
+
+---
+
+## Calibracion de mooz desde wire endpoints (no textos)
+
+**Fix aplicado:** commit `93ac2c0`
+
+**Problema:** estimar `mooz` desde los textos `#cccccc` de nombres de componentes introducía un sesgo tipográfico variable por símbolo (~0.5%). Los textos no coinciden con el anchor del símbolo — Xschem los coloca con un offset que depende del símbolo. Este sesgo causaba un desfase visible en los trayectos de wires de ~2-10px.
+
+**Medición del sesgo:** `mooz` desde textos = 0.4541, `mooz` real desde wire endpoints = 0.4517. Diferencia de 0.5% que se amplifica con la distancia.
+
+**Solución:** en `_lstsq_fixed_origins()`, una vez obtenido un `mooz` preliminar desde textos, se matchean los endpoints de wires del `.sch` contra los paths `M x yL x y` del SVG usando búsqueda del vecino más cercano con umbral de 8px. Con los pares validados se recalcula `mooz` desde ambos ejes X e Y. Error final `<0.01px`.
+
+**Move All — detección de reorganización cosmética:** si >80% de los componentes comunes entre dos versiones solo cambian en coordenadas (sin cambios de símbolo, parámetros ni nombre), se marca el diff completo como `is_move_all=True` y se suprime la lista individual de cambios. Un "Move All" en Xschem es cosmético — no cambia el circuito.

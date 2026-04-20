@@ -24,6 +24,14 @@ research/
 |---|---|
 | [lenguajes_y_stack.md](arquitectura/lenguajes_y_stack.md) | Análisis Python vs Rust vs otros. Recomendación: Python (MVP) + Rust (streaming GDS). |
 | [arquitectura_cli_y_orquestacion.md](arquitectura/arquitectura_cli_y_orquestacion.md) | Diseño de comandos `miku diff/merge/blame/log/ci`, plugin system, `miku doctor`, `miku.toml`. |
+| [metricas_riku.md](arquitectura/metricas_riku.md) | Benchmarks de Riku: parser, git service, diff semántico, cache SVG, annotator. Medidos 2026-04-19. |
+| [metricas_y_benchmarks.md](arquitectura/metricas_y_benchmarks.md) | Benchmarks experimentales del binding Rust de gdstk (Miku). Referencia histórica. |
+| [svg_annotator_coordenadas.md](arquitectura/svg_annotator_coordenadas.md) | Sistema de calibración de coordenadas .sch → SVG. Formula Xschem, origins.txt, calibración desde wire endpoints. |
+| [gotchas_xschem.md](arquitectura/gotchas_xschem.md) | 8 problemas concretos encontrados con Xschem y el SVG annotator, con causa y fix documentados. |
+| [gotchas_tecnicos.md](arquitectura/gotchas_tecnicos.md) | 20 gotchas del binding Rust de gdstk (enums dispersos, CRLF, cxx limitaciones, etc.). |
+| [decisiones_tecnicas.md](arquitectura/decisiones_tecnicas.md) | Decisiones de arquitectura y refactors del módulo Riku (stack, diff strategy, modelos). |
+| [gdstk_rust_bindings_migracion.md](arquitectura/gdstk_rust_bindings_migracion.md) | Plan de migración de gdstk a Rust con PyO3. |
+| [gdstk_rust_decisiones.md](arquitectura/gdstk_rust_decisiones.md) | Decisiones específicas del binding Rust de gdstk. |
 
 ---
 
