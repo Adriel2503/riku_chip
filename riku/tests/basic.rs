@@ -4,11 +4,11 @@ use std::path::Path;
 use git2::{Repository, Signature};
 use serde_json::json;
 
-use riku_rust::core::git_service::{GitError, GitService, LARGE_BLOB_THRESHOLD};
-use riku_rust::core::models::{ChangeKind, FileFormat};
-use riku_rust::core::ports::GitRepository;
-use riku_rust::core::semantic_diff::diff;
-use riku_rust::parsers::xschem::{detect_format, parse};
+use riku::core::git_service::{GitError, GitService, LARGE_BLOB_THRESHOLD};
+use riku::core::models::{ChangeKind, FileFormat};
+use riku::core::ports::GitRepository;
+use riku::core::semantic_diff::diff;
+use riku::parsers::xschem::{detect_format, parse};
 
 fn commit_file(repo: &Repository, rel_path: &str, content: &str, message: &str) -> git2::Oid {
     let workdir = repo.workdir().expect("workdir");
@@ -218,7 +218,7 @@ fn git_service_reports_renames() {
     let changes = svc.get_changed_files("HEAD~1", "HEAD").unwrap();
 
     assert_eq!(changes.len(), 1);
-    assert_eq!(changes[0].status, riku_rust::core::git_service::ChangeStatus::Renamed);
+    assert_eq!(changes[0].status, riku::core::git_service::ChangeStatus::Renamed);
     assert_eq!(changes[0].path, new_path);
     assert_eq!(changes[0].old_path.as_deref(), Some(old_path));
 }

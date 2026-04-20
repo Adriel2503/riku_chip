@@ -1,14 +1,14 @@
 [package]
-name = "riku-rust"
+name = "riku"
 version = "0.1.0"
 edition = "2024"
 description = "VCS semantico para diseno de chips"
-authors = ["Ariel Amado Frias Rojas"]
+authors = ["euler <carlos.cuevaleon@gmail.com>", "Adriel2503 <Adriel2503@users.noreply.github.com>"]
 license = "MIT"
 default-run = "riku"
 
 [lib]
-name = "riku_rust"
+name = "riku"
 path = "src/lib.rs"
 
 [[bin]]

@@ -1,4 +1,4 @@
-/// Tests de estres y rendimiento para riku_rust.
+/// Tests de estres y rendimiento para riku.
 ///
 /// Cubren:
 /// - Parser con esquematico real (op_sim.sch)
@@ -13,11 +13,11 @@ use std::time::Instant;
 
 use git2::{Repository, Signature};
 
-use riku_rust::core::git_service::GitService;
-use riku_rust::core::ports::GitRepository;
-use riku_rust::core::semantic_diff::diff as semantic_diff;
-use riku_rust::parsers::xschem::{detect_format, parse};
-use riku_rust::core::models::FileFormat;
+use riku::core::git_service::GitService;
+use riku::core::ports::GitRepository;
+use riku::core::semantic_diff::diff as semantic_diff;
+use riku::parsers::xschem::{detect_format, parse};
+use riku::core::models::FileFormat;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -148,7 +148,7 @@ fn diff_detects_component_value_change() {
 
     let report = semantic_diff(&base, &modified);
     let modified_components: Vec<_> = report.components.iter()
-        .filter(|c| c.kind == riku_rust::core::models::ChangeKind::Modified)
+        .filter(|c| c.kind == riku::core::models::ChangeKind::Modified)
         .collect();
     assert!(!modified_components.is_empty(), "debe detectar al menos un componente modificado");
 }
@@ -232,7 +232,7 @@ fn git_service_log_semantic_across_revisions() {
 
 #[test]
 fn large_blob_threshold_is_honored() {
-    use riku_rust::core::git_service::LARGE_BLOB_THRESHOLD;
+    use riku::core::git_service::LARGE_BLOB_THRESHOLD;
 
     // Verificar que el threshold esta definido y es razonable (50 MB)
     assert_eq!(LARGE_BLOB_THRESHOLD, 50 * 1024 * 1024);

@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 use git2::{Repository, Signature};
 use serde_json::Value;
 
-use riku_rust::adapters::xschem_driver::XschemDriver;
-use riku_rust::core::driver::RikuDriver;
+use riku::adapters::xschem_driver::XschemDriver;
+use riku::core::driver::RikuDriver;
 
 #[derive(Debug)]
 struct CmdResult {
