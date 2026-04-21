@@ -1,36 +1,54 @@
 # Riku — VCS semántico para diseño de chips
 
-Riku es una herramienta de control de versiones semántico sobre Git para archivos de diseño EDA. En lugar de mostrar diffs de texto crudo en archivos binarios o de formato propietario, Riku interpreta los cambios al nivel de componentes, conexiones y nets.
+Riku es una herramienta de control de versiones semántico sobre Git para archivos EDA. En lugar de diffs de texto crudo, interpreta los cambios al nivel de componentes, conexiones y nets.
 
-## Estado actual
+**Implementación: Rust puro. Sin dependencia del binario `xschem`.**
 
-- Xschem (`.sch`) — **completamente implementado**: diff semántico, render SVG, anotación visual con bounding boxes y trayectos de wires.
-- KLayout (`.gds`/`.oas`), Magic (`.mag`), NGSpice (`.raw`) — arquitectura lista, drivers pendientes.
+## Características
+
+- `riku diff` — diff semántico entre commits: componentes añadidos/removidos/modificados, nets, cambios cosméticos (Move All)
+- `riku log` — historial de cambios semánticos por archivo
+- `riku render` — renderiza un esquemático a SVG nativo (sin xschem instalado)
+- `riku doctor` — verifica el entorno y drivers disponibles
+- Caché de renders por hash SHA-256 del contenido
+
+## Formatos soportados
+
+| Formato | Extensión | Diff | Render |
+|---------|-----------|------|--------|
+| Xschem  | `.sch`    | ✓    | ✓      |
+| KLayout, Magic, NGSpice | `.gds`, `.mag`, `.raw` | — | — |
 
 ## Instalación
 
 ```bash
-pip install -e .
+git clone https://github.com/riku-chip/riku_chip
+cd riku_chip/riku
+cargo build --release
+# binario en: target/release/riku
 ```
 
-Requiere Python 3.11+. Para el diff visual se necesita `xschem` en el PATH.
+Requiere Rust 1.75+. No requiere `xschem` instalado.
 
 ## Uso
 
 ```bash
 # Diff semántico entre dos commits
-riku diff <commit_a> <commit_b> ruta/al/archivo.sch
+riku diff <commit_a> <commit_b> ruta/archivo.sch
 
-# Salida JSON (para CI/scripts)
+# Salida JSON
 riku diff <commit_a> <commit_b> archivo.sch --format json
 
 # Diff visual — abre SVG anotado con los cambios
 riku diff <commit_a> <commit_b> archivo.sch --format visual
 
-# Historial semántico
-riku log archivo.sch --semantic
+# Renderizar un archivo a SVG
+riku render archivo.sch
 
-# Verificar herramientas EDA disponibles
+# Historial semántico
+riku log archivo.sch
+
+# Verificar drivers disponibles
 riku doctor
 ```
 
@@ -38,44 +56,37 @@ riku doctor
 
 ```
 riku/
-  cli.py              — comandos Typer: diff, log, doctor
-  core/
-    models.py         — Component, Wire, Schematic, DiffReport
-    driver.py         — RikuDriver (protocolo abstracto)
-    analyzer.py       — orquestador: Git + driver + report
-    registry.py       — dispatch por extensión de archivo
-    semantic_diff.py  — diff semántico de schematics
-    svg_annotator.py  — anotación de SVGs con bounding boxes y wires
-  parsers/
-    xschem.py         — parser de archivos .sch
-  adapters/
-    xschem_driver.py  — driver Xschem: info, diff, render
-tests/
-  test_xschem_parser.py
-  test_analyzer.py
-  test_svg_annotator.py
-  bench_*.py          — benchmarks de rendimiento
-planificacion/
-  decisiones_tecnicas.md       — registro de decisiones de implementación
-  decision_migracion_rust.md   — cuándo y qué migrar a Rust (con benchmarks)
-  xschem/                      — arquitectura y roadmap
-research/
-  arquitectura/      — decisiones de stack, benchmarks, gotchas técnicos
-  herramientas/      — investigación por herramienta EDA
-  operaciones/       — caché, CI, estrategia de merge
-  ux/                — flujos de usuario reales
+  src/
+    cli.rs              — comandos: diff, log, render, doctor
+    core/
+      models.rs         — Component, Wire, Schematic, DiffReport
+      driver.rs         — trait RikuDriver
+      git_service.rs    — acceso a objetos Git via git2
+      semantic_diff.rs  — diff semántico de schematics
+      svg_annotator.rs  — anotación de SVGs con bounding boxes
+    parsers/
+      xschem.rs         — delega en xschem_viewer::parser (PEG)
+    adapters/
+      xschem_driver.rs  — implementa RikuDriver para .sch
+  tests/
+    basic.rs            — tests de integración
+    stress.rs           — benchmarks
+
+examples/
+  SH/op_sim.sch         — esquemático de referencia (sky130A)
 ```
 
-## Dependencias
+## Dependencias clave
 
-- `pygit2` — acceso a objetos Git (1.4ms/blob, sin fork de proceso)
-- `typer` — CLI con type hints
-- `xschem` (externo, en PATH) — render SVG headless
+| Crate | Rol |
+|-------|-----|
+| `xschem-viewer` | Parser PEG + renderer SVG nativo para `.sch` |
+| `git2` | Acceso a blobs y commits Git |
+| `clap` | CLI |
+| `sha2` | Cache key por hash de contenido |
 
-## Migración A Rust
+`xschem-viewer` vive en [github.com/carloscl03/xschem-viewer-rust](https://github.com/carloscl03/xschem-viewer-rust) y se importa como dependencia git.
 
-- [Plan maestro](planificacion/plan_migracion_rust.md)
-- [Checklist corto](planificacion/plan_migracion_rust_checklist.md)
-- [Índice por fases](planificacion/plan_migracion_rust_indice.md)
-- [Futuro del CLI](planificacion/cli_futuro.md)
-- [Historial de conversación](planificacion/historial_conversacion.md)
+## Detección de PDK
+
+`riku render` detecta automáticamente los sym_paths del PDK leyendo `.xschemrc` en el directorio del proyecto o en `~`. Parsea `PDK_ROOT`, `PDK` y `XSCHEM_LIBRARY_PATH` con el mismo esquema que usa xschem.
