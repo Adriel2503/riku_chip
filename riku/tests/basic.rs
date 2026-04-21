@@ -70,7 +70,7 @@ fn commit_rename(repo: &Repository, old_rel_path: &str, new_rel_path: &str, mess
 
 #[test]
 fn detects_and_parses_xschem() {
-    let content = br#"xschem version=3.0.0
+    let content = br#"v {xschem version=3.0.0 file_version=1.2}
 C {res.sym} 10 20 0 0 {name=R1 value=10k}
 N 10 20 30 40 {lab=NET1}
 "#;
@@ -101,11 +101,11 @@ fn parses_real_xschem_fixture() {
 
 #[test]
 fn semantic_diff_marks_move_all() {
-    let a = br#"xschem version=3.0.0
+    let a = br#"v {xschem version=3.0.0 file_version=1.2}
 C {res.sym} 10 20 0 0 {name=R1 value=10k}
 C {cap.sym} 30 40 0 0 {name=C1 value=1p}
 "#;
-    let b = br#"xschem version=3.0.0
+    let b = br#"v {xschem version=3.0.0 file_version=1.2}
 C {res.sym} 15 25 0 0 {name=R1 value=10k}
 C {cap.sym} 35 45 0 0 {name=C1 value=1p}
 "#;
@@ -119,12 +119,12 @@ C {cap.sym} 35 45 0 0 {name=C1 value=1p}
 
 #[test]
 fn semantic_diff_marks_added_removed_and_modified() {
-    let a = br#"xschem version=3.0.0
+    let a = br#"v {xschem version=3.0.0 file_version=1.2}
 C {res.sym} 10 20 0 0 {name=R1 value=10k}
 C {cap.sym} 30 40 0 0 {name=C1 value=1p}
 N 0 0 10 0 {lab=NET1}
 "#;
-    let b = br#"xschem version=3.0.0
+    let b = br#"v {xschem version=3.0.0 file_version=1.2}
 C {res.sym} 10 20 0 0 {name=R1 value=22k}
 C {ind.sym} 70 80 0 0 {name=L1 value=2u}
 N 0 0 10 0 {lab=NET2}
@@ -164,13 +164,13 @@ fn git_service_reads_commits_and_blobs() {
     let _first = commit_file(
         &repo,
         file_path,
-        "xschem version=3.0.0\nC {res.sym} 10 20 0 0 {name=R1 value=10k}\n",
+        "v {xschem version=3.0.0 file_version=1.2}\nC {res.sym} 10 20 0 0 {name=R1 value=10k}\n",
         "init",
     );
     let _second = commit_file(
         &repo,
         file_path,
-        "xschem version=3.0.0\nC {res.sym} 10 20 0 0 {name=R1 value=22k}\n",
+        "v {xschem version=3.0.0 file_version=1.2}\nC {res.sym} 10 20 0 0 {name=R1 value=22k}\n",
         "update",
     );
 
@@ -209,7 +209,7 @@ fn git_service_reports_renames() {
     commit_file(
         &repo,
         old_path,
-        "xschem version=3.0.0\nC {res.sym} 10 20 0 0 {name=R1 value=10k}\n",
+        "v {xschem version=3.0.0 file_version=1.2}\nC {res.sym} 10 20 0 0 {name=R1 value=10k}\n",
         "init",
     );
     commit_rename(&repo, old_path, new_path, "rename");
