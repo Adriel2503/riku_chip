@@ -7,10 +7,11 @@ Riku es una herramienta de control de versiones semántico sobre Git para archiv
 ## Características
 
 - `riku diff` — diff semántico entre commits: componentes añadidos/removidos/modificados, nets, cambios cosméticos (Move All)
+- `riku diff --format visual` — HTML con dos paneles lado a lado (antes/después), cada uno con el SVG anotado en colores
+- `riku render` — renderiza un `.sch` local a SVG y lo abre
 - `riku log` — historial de cambios semánticos por archivo
-- `riku render` — renderiza un esquemático a SVG nativo (sin xschem instalado)
 - `riku doctor` — verifica el entorno y drivers disponibles
-- Caché de renders por hash SHA-256 del contenido
+- Caché de renders por hash SHA-256 del contenido (sin re-renderizar si el archivo no cambió)
 
 ## Formatos soportados
 
@@ -39,10 +40,10 @@ riku diff <commit_a> <commit_b> ruta/archivo.sch
 # Salida JSON
 riku diff <commit_a> <commit_b> archivo.sch --format json
 
-# Diff visual — abre SVG anotado con los cambios
+# Diff visual — HTML lado a lado con SVGs anotados
 riku diff <commit_a> <commit_b> archivo.sch --format visual
 
-# Renderizar un archivo a SVG
+# Renderizar un archivo local a SVG
 riku render archivo.sch
 
 # Historial semántico
