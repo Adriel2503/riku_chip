@@ -177,42 +177,36 @@ fn run_visual(
 fn open_file(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let status = Command::new("cmd")
+        Command::new("cmd")
             .args(["/C", "start", "", &path.to_string_lossy()])
-            .status()
+            .spawn()
             .map_err(|e| e.to_string())?;
-        if status.success() {
-            return Ok(());
-        }
-        return Err("No se pudo abrir el archivo en Windows.".to_string());
+        return Ok(());
     }
 
     #[cfg(target_os = "macos")]
     {
-        let status = Command::new("open")
+        Command::new("open")
             .arg(path)
-            .status()
+            .spawn()
             .map_err(|e| e.to_string())?;
-        if status.success() {
-            return Ok(());
-        }
-        return Err("No se pudo abrir el archivo en macOS.".to_string());
+        return Ok(());
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-        let status = Command::new("xdg-open")
+        match Command::new("xdg-open")
             .env("DISPLAY", &display)
             .arg(path)
-            .status()
-            .map_err(|e| e.to_string())?;
-        if status.success() {
-            return Ok(());
+            .spawn()
+        {
+            Ok(_) => {}
+            Err(_) => {
+                eprintln!("[!] No se pudo abrir el SVG automaticamente.");
+                eprintln!("    Abrelo manualmente: {}", path.display());
+            }
         }
-        // Fallback: imprimir la ruta para que el usuario la abra manualmente
-        eprintln!("[!] No se pudo abrir el SVG automaticamente.");
-        eprintln!("    Abrelo manualmente: {}", path.display());
         Ok(())
     }
 }

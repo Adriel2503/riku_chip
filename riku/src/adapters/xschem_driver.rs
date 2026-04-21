@@ -173,55 +173,29 @@ impl RikuDriver for XschemDriver {
     }
 
     fn render(&self, content: &[u8], _path_hint: &str) -> Option<PathBuf> {
-        let xschem = Self::find_xschem()?;
-        let info = self.info();
-        if !info.available {
-            return None;
-        }
+        let text = std::str::from_utf8(content).ok()?;
 
-        let (cached, origins_path, key) = Self::render_paths(&info.version, content);
+        // Cache key is a hash of the content — version-independent since we render natively
+        let key = {
+            use sha2::{Digest, Sha256};
+            let digest = Sha256::digest(content);
+            digest.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        };
+
+        let cached = Self::cache_dir().join(&key).join("render.svg");
         if cached.exists() {
             return Some(cached);
         }
 
+        let opts = xschem_viewer::RenderOptions::dark()
+            .with_sym_paths_from_xschemrc();
+
+        let result = xschem_viewer::Renderer::new(opts).render(text).ok()?;
+
         fs::create_dir_all(cached.parent()?).ok()?;
-        let manifest_path = cached.parent()?.join("render.json");
+        fs::write(&cached, &result.svg).ok()?;
 
-        let mut tmp = tempfile::NamedTempFile::new().ok()?;
-        std::io::Write::write_all(&mut tmp, content).ok()?;
-        let tmp_path = tmp.into_temp_path();
-
-        let tcl_command = format!(
-            "xschem zoom_full; set _f [open $env(RIKU_ORIGINS_PATH) w]; puts $_f [xschem get xorigin]; puts $_f [xschem get yorigin]; close $_f; xschem print svg {}",
-            cached.display()
-        );
-
-        // --tcl recibe codigo TCL inline (no un archivo); sin shell=True no hay
-        // interpretacion de $ por bash, asi que RIKU_ORIGINS_PATH llega intacto a TCL.
-        let status = Command::new(&xschem)
-            .arg("--tcl")
-            .arg("wm iconify .")
-            .arg("--command")
-            .arg(&tcl_command)
-            .arg("--quit")
-            .arg(tmp_path.as_os_str())
-            .env("RIKU_ORIGINS_PATH", &origins_path)
-            .status()
-            .ok()?;
-
-        if status.success() && cached.exists() {
-            let manifest = RenderManifest {
-                driver: "xschem",
-                version: &info.version,
-                source_sha256: &key,
-            };
-            if let Ok(json) = serde_json::to_string_pretty(&manifest) {
-                let _ = fs::write(manifest_path, json);
-            }
-            Some(cached)
-        } else {
-            None
-        }
+        Some(cached)
     }
 }
 
