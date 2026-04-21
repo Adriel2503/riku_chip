@@ -198,7 +198,7 @@ Solo se añaden los paths que existen en disco. Si no se encuentra ningún `.xsc
 
 | Crate | Rol |
 |-------|-----|
-| [`xschem-viewer`](https://github.com/carloscj03/xschem-viewer-rust) | Parser PEG + renderer SVG nativo para `.sch` y `.sym` |
+| [`xschem-viewer`](https://github.com/carloscl03/xschem-viewer-rust) | Parser PEG + renderer SVG nativo para `.sch` y `.sym` |
 | `git2` | Acceso a blobs, commits y diffs Git (sin fork de proceso) |
 | `clap` | CLI con subcomandos y argumentos tipados |
 | `sha2` | Hash SHA-256 para la clave de caché de renders |
