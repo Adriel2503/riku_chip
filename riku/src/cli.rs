@@ -11,6 +11,8 @@ use crate::core::ports::GitRepository;
 use crate::core::registry::get_drivers;
 use crate::core::svg_annotator::annotate;
 use crate::parsers::xschem::parse;
+use crate::adapters::xschem_driver::XschemDriver;
+use crate::core::driver::RikuDriver;
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum OutputFormat {
@@ -57,6 +59,10 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         repo: PathBuf,
     },
+    /// Renderiza un archivo .sch a SVG y lo abre.
+    Render {
+        file: PathBuf,
+    },
 }
 
 pub fn run() -> ExitCode {
@@ -77,6 +83,7 @@ pub fn run() -> ExitCode {
             semantic,
         } => run_log(repo, file_path.as_deref(), limit, semantic),
         Commands::Doctor { repo } => run_doctor(repo),
+        Commands::Render { file } => run_render(file),
     };
 
     match result {
@@ -142,35 +149,130 @@ fn run_visual(
     report: &crate::core::driver::DriverDiffReport,
 ) -> Result<(), String> {
     let svc = GitService::open(&repo).map_err(|e| e.to_string())?;
-    let driver = crate::core::registry::get_driver_for(file_path)
-        .ok_or_else(|| "No hay driver visual para este formato.".to_string())?;
+    let driver = XschemDriver::new();
 
     let content_b = GitRepository::get_blob(&svc, commit_b, file_path)
         .map_err(|e| e.to_string())?;
-    let svg_path = driver
-        .render(&content_b, file_path)
-        .ok_or_else(|| "Render no disponible (herramienta EDA no instalada).".to_string())?;
     let sch_b = parse(&content_b);
+    let svg_b_path = driver
+        .render(&content_b, file_path)
+        .ok_or_else(|| "Render del commit B no disponible.".to_string())?;
+    let svg_b = std::fs::read_to_string(&svg_b_path).map_err(|e| e.to_string())?;
 
-    let sch_a = match GitRepository::get_blob(&svc, commit_a, file_path) {
-        Ok(content_a) => Some(parse(&content_a)),
-        Err(_) => None,
+    let (svg_a, sch_a) = match GitRepository::get_blob(&svc, commit_a, file_path) {
+        Ok(content_a) => {
+            let sch = parse(&content_a);
+            let svg_path = driver.render(&content_a, file_path);
+            let svg = svg_path.and_then(|p| std::fs::read_to_string(&p).ok());
+            (svg, Some(sch))
+        }
+        Err(_) => (None, None),
     };
 
     let diff_report = driver_report_to_diff_report(report);
 
-    let svg_content = std::fs::read_to_string(&svg_path).map_err(|e| e.to_string())?;
-    let annotated = annotate(&svg_content, &sch_b, &diff_report, sch_a.as_ref(), Some(&svg_path));
+    let annotated_b = annotate(&svg_b, &sch_b, &diff_report, sch_a.as_ref());
+    let panel_a = svg_a
+        .as_deref()
+        .map(|svg| {
+            // Para el panel A mostramos el esquemático anterior sin anotaciones de cambio,
+            // solo marcamos en gris los componentes que desaparecerán.
+            let removed_report = DiffReport {
+                components: diff_report
+                    .components
+                    .iter()
+                    .filter(|c| c.kind == ChangeKind::Removed)
+                    .cloned()
+                    .collect(),
+                nets_added: vec![],
+                nets_removed: diff_report.nets_removed.clone(),
+                is_move_all: false,
+            };
+            if let Some(sch_a) = sch_a.as_ref() {
+                annotate(svg, sch_a, &removed_report, None)
+            } else {
+                svg.to_string()
+            }
+        })
+        .unwrap_or_else(|| "<p style='color:#888'>Archivo nuevo — no existe en el commit anterior</p>".to_string());
 
-    let mut tmp = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
-    std::io::Write::write_all(&mut tmp, annotated.as_bytes()).map_err(|e| e.to_string())?;
+    let html = build_diff_html(commit_a, commit_b, file_path, &panel_a, &annotated_b);
+
+    let mut tmp = tempfile::Builder::new()
+        .suffix(".html")
+        .tempfile()
+        .map_err(|e| e.to_string())?;
+    std::io::Write::write_all(&mut tmp, html.as_bytes()).map_err(|e| e.to_string())?;
     let out_path = tmp
         .into_temp_path()
         .keep()
         .map_err(|e| e.error.to_string())?;
 
-    println!("SVG anotado: {}", out_path.display());
+    println!("Diff visual: {}", out_path.display());
     open_file(&out_path)?;
+    Ok(())
+}
+
+fn build_diff_html(
+    commit_a: &str,
+    commit_b: &str,
+    file_path: &str,
+    panel_a: &str,
+    panel_b: &str,
+) -> String {
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>riku diff — {file_path}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ background: #1a1a1a; color: #ccc; font-family: monospace; display: flex; flex-direction: column; height: 100vh; }}
+  header {{ padding: 8px 16px; background: #111; border-bottom: 1px solid #333; font-size: 13px; }}
+  header span {{ color: #888; }}
+  .panels {{ display: flex; flex: 1; overflow: hidden; gap: 2px; padding: 2px; }}
+  .panel {{ flex: 1; display: flex; flex-direction: column; background: #111; border: 1px solid #333; overflow: hidden; }}
+  .panel-label {{ padding: 4px 10px; font-size: 11px; color: #888; background: #0d0d0d; border-bottom: 1px solid #222; }}
+  .panel-label b {{ color: #ccc; }}
+  .panel-body {{ flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 8px; }}
+  .panel-body svg {{ max-width: 100%; max-height: 100%; }}
+  .legend {{ padding: 6px 16px; background: #111; border-top: 1px solid #333; font-size: 11px; display: flex; gap: 16px; }}
+  .dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }}
+</style>
+</head>
+<body>
+<header><span>riku diff</span> &nbsp;·&nbsp; {file_path} &nbsp;·&nbsp; <span>{commit_a}</span> → <span>{commit_b}</span></header>
+<div class="panels">
+  <div class="panel">
+    <div class="panel-label">ANTES &nbsp;<b>{commit_a}</b></div>
+    <div class="panel-body">{panel_a}</div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">DESPUÉS &nbsp;<b>{commit_b}</b></div>
+    <div class="panel-body">{panel_b}</div>
+  </div>
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:rgba(0,200,0,0.7)"></span>Añadido</span>
+  <span><span class="dot" style="background:rgba(200,0,0,0.7)"></span>Removido</span>
+  <span><span class="dot" style="background:rgba(255,180,0,0.7)"></span>Modificado</span>
+  <span><span class="dot" style="background:rgba(120,120,120,0.7)"></span>Cosmético</span>
+</div>
+</body>
+</html>"#
+    )
+}
+
+fn run_render(file: PathBuf) -> Result<(), String> {
+    let content = std::fs::read(&file).map_err(|e| e.to_string())?;
+    let driver = XschemDriver::new();
+    let path_hint = file.to_string_lossy();
+    let svg_path = driver
+        .render(&content, &path_hint)
+        .ok_or_else(|| "No se pudo renderizar el archivo.".to_string())?;
+    println!("SVG: {}", svg_path.display());
+    open_file(&svg_path)?;
     Ok(())
 }
 

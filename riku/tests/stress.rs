@@ -112,7 +112,7 @@ fn parse_gds_binary_does_not_panic() {
 #[test]
 fn throughput_100_parse_and_diff() {
     const N: usize = 100;
-    const MAX_MS: u128 = 5_000; // 5 segundos para 100 iteraciones es holgado
+    const MAX_MS: u128 = 10_000; // 10s en dev (sin opt); release es ~3x mas rapido
 
     let base = op_sim_content();
     let modified: Vec<u8> = String::from_utf8_lossy(&base)
