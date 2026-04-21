@@ -153,7 +153,7 @@ impl RikuDriver for XschemDriver {
         if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
             let pdk_path = std::path::Path::new(&root).join(pdk).join("libs.tech/xschem");
             if pdk_path.exists() {
-                opts = opts.add_symbol_path(pdk_path.to_string_lossy().to_string());
+                opts = opts.with_sym_path(pdk_path.to_string_lossy().to_string());
             }
         }
 
