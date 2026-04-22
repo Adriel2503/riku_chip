@@ -420,8 +420,19 @@ fn locate_gui_binary() -> Option<PathBuf> {
     }
     let exe = std::env::current_exe().ok()?;
     let bin_name = format!("riku-gui{}", std::env::consts::EXE_SUFFIX);
-    let sibling = exe.parent()?.join(bin_name);
-    if sibling.exists() { Some(sibling) } else { None }
+    // Same directory as riku binary (release next to release, debug next to debug)
+    let sibling = exe.parent()?.join(&bin_name);
+    if sibling.exists() { return Some(sibling); }
+    // Workspace target/release or target/debug (two levels up from riku/target/<profile>/)
+    if let Some(profile_dir) = exe.parent() {
+        for candidate in [
+            profile_dir.parent().and_then(|p| p.parent()).map(|p| p.join("release").join(&bin_name)),
+            profile_dir.parent().and_then(|p| p.parent()).map(|p| p.join("debug").join(&bin_name)),
+        ].into_iter().flatten() {
+            if candidate.exists() { return Some(candidate); }
+        }
+    }
+    None
 }
 
 // ─── Shell ───────────────────────────────────────────────────────────────────

@@ -64,12 +64,3 @@ fn entry_name(entry: &ProjectEntry) -> &str {
         ProjectEntry::Directory { name, .. } | ProjectEntry::File { name, .. } => name,
     }
 }
-
-pub fn is_gds_renderable(path: &Path) -> bool {
-    matches!(
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.to_ascii_lowercase()),
-        Some(ext) if ext == "gds" || ext == "oas" || ext == "oasisc" || ext == "gdsii"
-    )
-}

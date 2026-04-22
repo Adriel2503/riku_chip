@@ -276,19 +276,9 @@ fn build_scene(content: &str) -> Result<xschem_viewer::ResolvedScene, String> {
     Ok(xschem_viewer::SceneBuilder::new(&opts).build(&parsed))
 }
 
-fn empty_scene() -> xschem_viewer::ResolvedScene {
-    xschem_viewer::ResolvedScene {
-        elements: vec![],
-        bbox: xschem_viewer::BoundingBox::default(),
-        missing_symbols: vec![],
-        wires: vec![],
-        pin_positions: std::collections::HashMap::new(),
-    }
-}
 
 fn get_blob_content(repo: &Path, commit: &str, file_path: &str) -> Result<String, String> {
     use riku::core::git_service::GitService;
-    use riku::core::ports::GitRepository;
     let svc = GitService::open(repo).map_err(|e| e.to_string())?;
     let bytes = svc.get_blob(commit, file_path).map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|e| e.to_string())
