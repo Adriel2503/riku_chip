@@ -26,7 +26,26 @@ pub struct RikuGuiApp {
 }
 
 impl RikuGuiApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, launch: LaunchArgs) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, launch: LaunchArgs) -> Self {
+        // Load a system font explicitly — egui's embedded font sometimes fails with glow backend
+        let mut fonts = egui::FontDefinitions::default();
+        for path in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+        ] {
+            if let Ok(bytes) = std::fs::read(path) {
+                fonts.font_data.insert(
+                    "system".to_owned(),
+                    egui::FontData::from_owned(bytes).into(),
+                );
+                fonts.families.entry(egui::FontFamily::Proportional)
+                    .or_default().insert(0, "system".to_owned());
+                fonts.families.entry(egui::FontFamily::Monospace)
+                    .or_default().insert(0, "system".to_owned());
+                break;
+            }
+        }
+        cc.egui_ctx.set_fonts(fonts);
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         let (project_root, selected_path): (PathBuf, Option<PathBuf>) = match &launch.file {
