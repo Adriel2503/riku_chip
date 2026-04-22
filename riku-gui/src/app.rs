@@ -2,10 +2,11 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, RichText};
 
+use crate::main::LaunchArgs;
 use crate::project::ProjectEntry;
 use crate::sch_painter::{SchViewport, paint_sch};
 
-// ─── Estado del schematic abierto ────────────────────────────────────────────
+// ─── Estado del schematic ─────────────────────────────────────────────────────
 
 struct SchState {
     scene: xschem_viewer::ResolvedScene,
@@ -25,12 +26,13 @@ pub struct RikuGuiApp {
 }
 
 impl RikuGuiApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, initial_path: Option<PathBuf>) -> Self {
+    pub fn new(_cc: &eframe::CreationContext<'_>, launch: LaunchArgs) -> Self {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let (project_root, selected_path) = match initial_path {
+
+        let (project_root, selected_path) = match &launch.file {
             Some(path) if path.is_file() => {
                 let root = path.parent().map(Path::to_path_buf).unwrap_or_else(|| cwd.clone());
-                (root, Some(path))
+                (root, Some(path.clone()))
             }
             Some(path) if path.is_dir() => (path.clone(), None),
             _ => (cwd.clone(), None),
@@ -46,8 +48,20 @@ impl RikuGuiApp {
             error: None,
         };
 
-        if let Some(path) = app.selected_path.clone() {
-            app.open_path(&path);
+        // Modo diff: commits pasados desde el CLI
+        if let (Some(file), Some(ca), Some(cb)) = (&launch.file, &launch.commit_a, &launch.commit_b) {
+            let repo = launch.repo.as_deref().unwrap_or(Path::new("."));
+            match app.load_diff(repo, ca, cb, file) {
+                Ok(()) => app.status = format!("Diff {} → {}", ca, cb),
+                Err(e) => { app.error = Some(e.clone()); app.status = "Error en diff".to_string(); }
+            }
+        } else if let Some(path) = app.selected_path.clone() {
+            if is_sch_renderable(&path) {
+                match app.load_sch(&path) {
+                    Ok(()) => app.status = format!("Loaded {}", path.display()),
+                    Err(e) => { app.error = Some(e.clone()); app.status = "Error".to_string(); }
+                }
+            }
         }
 
         app
@@ -65,10 +79,7 @@ impl RikuGuiApp {
         if is_sch_renderable(path) {
             match self.load_sch(path) {
                 Ok(()) => self.status = format!("Loaded {}", path.display()),
-                Err(e) => {
-                    self.error = Some(e.clone());
-                    self.status = format!("Error: {}", path.display());
-                }
+                Err(e) => { self.error = Some(e.clone()); self.status = "Error".to_string(); }
             }
         } else {
             self.status = format!("{} — formato no soportado aún", path.display());
@@ -77,23 +88,35 @@ impl RikuGuiApp {
 
     fn load_sch(&mut self, path: &Path) -> Result<(), String> {
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let scene = build_scene(&content)?;
+        let mut viewport = SchViewport::default();
+        let dummy = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+        viewport.fit_to(&scene, dummy);
+        self.sch = Some(SchState { scene, viewport, diff: None });
+        Ok(())
+    }
 
-        let mut opts = xschem_viewer::RenderOptions::dark().with_sym_paths_from_xschemrc();
-        if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
-            let pdk_path = std::path::Path::new(&root).join(&pdk).join("libs.tech/xschem");
-            if pdk_path.exists() {
-                opts = opts.with_sym_path(pdk_path.to_string_lossy().to_string());
-            }
-        }
+    fn load_diff(&mut self, repo: &Path, commit_a: &str, commit_b: &str, file: &Path) -> Result<(), String> {
+        use riku::adapters::xschem_driver::XschemDriver;
+        use riku::core::diff_view::DiffView;
+        use riku::parsers::xschem::parse;
 
-        let parsed = xschem_viewer::parser::parse(&content).map_err(|e| e.to_string())?;
+        let file_str = file.to_string_lossy();
+        let driver = XschemDriver::new();
+        let view = DiffView::from_commits(repo, commit_a, commit_b, &file_str, &driver, |b| parse(b))
+            .map_err(|e| e.to_string())?;
+
+        let opts = sch_render_opts();
+        let sch_content = get_blob_content(repo, commit_b, &file_str)?;
+        let parsed = xschem_viewer::parser::parse(&sch_content).map_err(|e| e.to_string())?;
         let scene = xschem_viewer::SceneBuilder::new(&opts).build(&parsed);
 
         let mut viewport = SchViewport::default();
-        let dummy_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
-        viewport.fit_to(&scene, dummy_rect);
+        let dummy = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+        viewport.fit_to(&scene, dummy);
 
-        self.sch = Some(SchState { scene, viewport, diff: None });
+        self.selected_path = Some(file.to_path_buf());
+        self.sch = Some(SchState { scene, viewport, diff: Some(view.report) });
         Ok(())
     }
 }
@@ -103,7 +126,6 @@ impl eframe::App for RikuGuiApp {
         let ctx = ui.ctx().clone();
         let mut reload = false;
 
-        // ── Top bar ───────────────────────────────────────────────────────────
         egui::Panel::top("top_bar").show_inside(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Riku").strong());
@@ -117,9 +139,7 @@ impl eframe::App for RikuGuiApp {
                 if let Some(sch) = self.sch.as_mut() {
                     ui.separator();
                     if ui.button("Fit").clicked() {
-                        let dummy = egui::Rect::from_min_size(
-                            egui::Pos2::ZERO, egui::vec2(800.0, 600.0),
-                        );
+                        let dummy = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
                         sch.viewport.fit_to(&sch.scene, dummy);
                     }
                     let mut scale = sch.viewport.scale as f32;
@@ -130,7 +150,6 @@ impl eframe::App for RikuGuiApp {
             });
         });
 
-        // ── Panel izquierdo: árbol de proyecto ────────────────────────────────
         egui::Panel::left("project_tree")
             .resizable(true)
             .default_size(240.0)
@@ -144,7 +163,6 @@ impl eframe::App for RikuGuiApp {
                 show_entry_tree(ui, &tree, selected_path.as_deref(), &mut open_path);
             });
 
-        // ── Panel derecho: info + diff ────────────────────────────────────────
         egui::Panel::right("info_panel")
             .resizable(true)
             .default_size(220.0)
@@ -203,7 +221,6 @@ impl eframe::App for RikuGuiApp {
                 }
             });
 
-        // ── Canvas central ────────────────────────────────────────────────────
         egui::CentralPanel::default().show_inside(ui, |ui| {
             if let Some(sch) = &mut self.sch {
                 let available = ui.available_size_before_wrap();
@@ -243,6 +260,39 @@ impl eframe::App for RikuGuiApp {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+fn sch_render_opts() -> xschem_viewer::RenderOptions {
+    let mut opts = xschem_viewer::RenderOptions::dark().with_sym_paths_from_xschemrc();
+    if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
+        let p = std::path::Path::new(&root).join(&pdk).join("libs.tech/xschem");
+        if p.exists() { opts = opts.with_sym_path(p.to_string_lossy().to_string()); }
+    }
+    opts
+}
+
+fn build_scene(content: &str) -> Result<xschem_viewer::ResolvedScene, String> {
+    let opts = sch_render_opts();
+    let parsed = xschem_viewer::parser::parse(content).map_err(|e| e.to_string())?;
+    Ok(xschem_viewer::SceneBuilder::new(&opts).build(&parsed))
+}
+
+fn empty_scene() -> xschem_viewer::ResolvedScene {
+    xschem_viewer::ResolvedScene {
+        elements: vec![],
+        bbox: xschem_viewer::BoundingBox::default(),
+        missing_symbols: vec![],
+        wires: vec![],
+        pin_positions: std::collections::HashMap::new(),
+    }
+}
+
+fn get_blob_content(repo: &Path, commit: &str, file_path: &str) -> Result<String, String> {
+    use riku::core::git_service::GitService;
+    use riku::core::ports::GitRepository;
+    let svc = GitService::open(repo).map_err(|e| e.to_string())?;
+    let bytes = svc.get_blob(commit, file_path).map_err(|e| e.to_string())?;
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
 
 fn is_sch_renderable(path: &Path) -> bool {
     path.extension()

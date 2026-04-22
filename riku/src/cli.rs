@@ -8,10 +8,9 @@ use crate::adapters::xschem_driver::XschemDriver;
 use crate::core::diff_view::{summarize_changes, DiffView};
 use crate::core::driver::RikuDriver;
 use crate::core::git_service::GitService;
-use crate::core::models::{ChangeKind, DiffReport};
+use crate::core::models::ChangeKind;
 use crate::core::ports::GitRepository;
 use crate::core::registry::get_drivers;
-use crate::core::svg_annotator::annotate;
 
 // ─── CLI types ───────────────────────────────────────────────────────────────
 
@@ -117,7 +116,7 @@ fn run_diff(
     match format {
         OutputFormat::Text => present_text(&view, file_path),
         OutputFormat::Json => present_json(&view, file_path),
-        OutputFormat::Visual => present_visual(commit_a, commit_b, file_path, &view),
+        OutputFormat::Visual => present_visual(&repo, commit_a, commit_b, file_path),
     }
 }
 
@@ -210,98 +209,20 @@ fn present_json(view: &DiffView, file_path: &str) -> Result<(), String> {
 }
 
 fn present_visual(
+    repo: &PathBuf,
     commit_a: &str,
     commit_b: &str,
     file_path: &str,
-    view: &DiffView,
 ) -> Result<(), String> {
-    // Panel B: estado actual con anotaciones de todos los cambios
-    let annotated_b = annotate(&view.svg_b, &view.sch_b, &view.report, view.sch_a.as_ref());
+    let repo_abs = repo.canonicalize().unwrap_or_else(|_| repo.clone());
+    let mut extra_args: Vec<std::ffi::OsString> = vec![
+        "--repo".into(),     repo_abs.into(),
+        "--commit-a".into(), commit_a.into(),
+        "--commit-b".into(), commit_b.into(),
+        file_path.into(),
+    ];
 
-    // Panel A: estado anterior con solo los removidos marcados
-    let panel_a = match &view.svg_a {
-        Some(svg) => {
-            let removed_only = DiffReport {
-                components: view.report.components.iter()
-                    .filter(|c| c.kind == ChangeKind::Removed)
-                    .cloned()
-                    .collect(),
-                nets_removed: view.report.nets_removed.clone(),
-                ..Default::default()
-            };
-            match &view.sch_a {
-                Some(sch_a) => annotate(svg, sch_a, &removed_only, None),
-                None => svg.clone(),
-            }
-        }
-        None => "<p style='color:#888'>Archivo nuevo — no existe en el commit anterior</p>"
-            .to_string(),
-    };
-
-    let html = build_diff_html(commit_a, commit_b, file_path, &panel_a, &annotated_b);
-    write_and_open_html(&html)
-}
-
-fn build_diff_html(
-    commit_a: &str,
-    commit_b: &str,
-    file_path: &str,
-    panel_a: &str,
-    panel_b: &str,
-) -> String {
-    format!(
-        r#"<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<title>riku diff — {file_path}</title>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: #1a1a1a; color: #ccc; font-family: monospace; display: flex; flex-direction: column; height: 100vh; }}
-  header {{ padding: 8px 16px; background: #111; border-bottom: 1px solid #333; font-size: 13px; }}
-  header span {{ color: #888; }}
-  .panels {{ display: flex; flex: 1; overflow: hidden; gap: 2px; padding: 2px; }}
-  .panel {{ flex: 1; display: flex; flex-direction: column; background: #111; border: 1px solid #333; overflow: hidden; }}
-  .panel-label {{ padding: 4px 10px; font-size: 11px; color: #888; background: #0d0d0d; border-bottom: 1px solid #222; }}
-  .panel-label b {{ color: #ccc; }}
-  .panel-body {{ flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 8px; }}
-  .panel-body svg {{ max-width: 100%; max-height: 100%; }}
-  .legend {{ padding: 6px 16px; background: #111; border-top: 1px solid #333; font-size: 11px; display: flex; gap: 16px; }}
-  .dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }}
-</style>
-</head>
-<body>
-<header><span>riku diff</span> &nbsp;·&nbsp; {file_path} &nbsp;·&nbsp; <span>{commit_a}</span> → <span>{commit_b}</span></header>
-<div class="panels">
-  <div class="panel">
-    <div class="panel-label">ANTES &nbsp;<b>{commit_a}</b></div>
-    <div class="panel-body">{panel_a}</div>
-  </div>
-  <div class="panel">
-    <div class="panel-label">DESPUÉS &nbsp;<b>{commit_b}</b></div>
-    <div class="panel-body">{panel_b}</div>
-  </div>
-</div>
-<div class="legend">
-  <span><span class="dot" style="background:rgba(0,200,0,0.7)"></span>Añadido</span>
-  <span><span class="dot" style="background:rgba(200,0,0,0.7)"></span>Removido</span>
-  <span><span class="dot" style="background:rgba(255,180,0,0.7)"></span>Modificado</span>
-  <span><span class="dot" style="background:rgba(120,120,120,0.7)"></span>Cosmético</span>
-</div>
-</body>
-</html>"#
-    )
-}
-
-fn write_and_open_html(html: &str) -> Result<(), String> {
-    let mut tmp = tempfile::Builder::new()
-        .suffix(".html")
-        .tempfile()
-        .map_err(|e| e.to_string())?;
-    std::io::Write::write_all(&mut tmp, html.as_bytes()).map_err(|e| e.to_string())?;
-    let path = tmp.into_temp_path().keep().map_err(|e| e.error.to_string())?;
-    println!("Diff visual: {}", path.display());
-    open_file(&path)
+    run_gui_with_args(extra_args)
 }
 
 // ─── Render ──────────────────────────────────────────────────────────────────
@@ -461,7 +382,10 @@ fn run_doctor(repo: PathBuf) -> Result<(), String> {
 fn run_gui(file: Option<PathBuf>) -> Result<(), String> {
     let args: Vec<std::ffi::OsString> =
         file.into_iter().map(|p| p.into_os_string()).collect();
+    run_gui_with_args(args)
+}
 
+fn run_gui_with_args(args: Vec<std::ffi::OsString>) -> Result<(), String> {
     if let Some(bin) = locate_gui_binary() {
         let status = Command::new(bin).args(&args).status().map_err(|e| e.to_string())?;
         return if status.success() { Ok(()) } else {
