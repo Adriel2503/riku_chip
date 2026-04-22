@@ -47,7 +47,7 @@ fn param_similarity(
         return 1.0;
     }
     let matching = all_keys.iter()
-        .filter(|k| a.params.get(*k) == b.params.get(*k))
+        .filter(|k| a.params.get(k.as_str()) == b.params.get(k.as_str()))
         .count();
     matching as f64 / all_keys.len() as f64
 }
