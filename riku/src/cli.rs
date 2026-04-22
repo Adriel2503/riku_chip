@@ -414,24 +414,44 @@ fn run_gui_with_args(args: Vec<std::ffi::OsString>) -> Result<(), String> {
 }
 
 fn locate_gui_binary() -> Option<PathBuf> {
+    let bin_name = format!("riku-gui{}", std::env::consts::EXE_SUFFIX);
+
+    // 1. Explicit override via env var
     if let Ok(path) = std::env::var("RIKU_GUI_BIN") {
-        let candidate = PathBuf::from(path);
+        let candidate = PathBuf::from(&path);
         if candidate.exists() { return Some(candidate); }
     }
-    let exe = std::env::current_exe().ok()?;
-    let bin_name = format!("riku-gui{}", std::env::consts::EXE_SUFFIX);
-    // Same directory as riku binary (release next to release, debug next to debug)
-    let sibling = exe.parent()?.join(&bin_name);
-    if sibling.exists() { return Some(sibling); }
-    // Workspace target/release or target/debug (two levels up from riku/target/<profile>/)
-    if let Some(profile_dir) = exe.parent() {
-        for candidate in [
-            profile_dir.parent().and_then(|p| p.parent()).map(|p| p.join("release").join(&bin_name)),
-            profile_dir.parent().and_then(|p| p.parent()).map(|p| p.join("debug").join(&bin_name)),
-        ].into_iter().flatten() {
-            if candidate.exists() { return Some(candidate); }
+
+    // 2. Sibling of current exe (works when both are in the same target/ dir)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // Canonicalize to avoid symlink or mixed-path issues
+            if let Ok(dir) = dir.canonicalize() {
+                let sibling = dir.join(&bin_name);
+                if sibling.exists() { return Some(sibling); }
+                // Workspace root: exe is in riku/target/<profile>/, gui is in target/<profile>/
+                for ancestor in [dir.parent(), dir.parent().and_then(|p| p.parent())] {
+                    if let Some(p) = ancestor {
+                        for profile in ["release", "debug"] {
+                            let candidate = p.join(profile).join(&bin_name);
+                            if candidate.exists() { return Some(candidate); }
+                        }
+                    }
+                }
+            }
         }
     }
+
+    // 3. CARGO_MANIFEST_DIR-relative: workspace target/release/ (compile-time known path)
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for profile in ["release", "debug"] {
+        let candidate = manifest_dir.parent()
+            .map(|p| p.join("target").join(profile).join(&bin_name));
+        if let Some(c) = candidate {
+            if c.exists() { return Some(c); }
+        }
+    }
+
     None
 }
 
