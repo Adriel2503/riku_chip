@@ -126,13 +126,73 @@ fn present_text(view: &DiffView, file_path: &str) -> Result<(), String> {
         println!("Sin cambios semanticos.");
         return Ok(());
     }
-    println!("Archivo: {file_path}");
-    println!("Cambios: {}", view.report.components.len());
-    println!();
-    for c in &view.report.components {
-        let cosmetic = if c.cosmetic { "  [cosmetico]" } else { "" };
-        println!("  {:<10} {}{cosmetic}", c.kind, c.name);
+
+    let semantic: Vec<_> = view.report.components.iter().filter(|c| !c.cosmetic).collect();
+    let cosmetic: Vec<_> = view.report.components.iter().filter(|c| c.cosmetic).collect();
+
+    println!("Archivo : {file_path}");
+    println!("Cambios : {}", semantic.len());
+    if !cosmetic.is_empty() {
+        println!("Cosméticos: {} (solo posición)", cosmetic.len());
     }
+    println!();
+
+    for c in &semantic {
+        let is_rename = c.kind == ChangeKind::Modified && c.name.contains(" → ");
+        let marker = if is_rename { "r" } else {
+            match c.kind {
+                ChangeKind::Added    => "+",
+                ChangeKind::Removed  => "-",
+                ChangeKind::Modified => "~",
+            }
+        };
+        println!("  {marker} {}", c.name);
+
+        // Parámetros que cambiaron
+        if let (Some(before), Some(after)) = (&c.before, &c.after) {
+            let all_keys: std::collections::BTreeSet<_> =
+                before.keys().chain(after.keys()).collect();
+            for key in all_keys {
+                // Ignorar coordenadas en cambios semánticos — no aportan
+                if matches!(key.as_str(), "x" | "y" | "rotation" | "mirror") {
+                    continue;
+                }
+                match (before.get(key), after.get(key)) {
+                    (Some(a), Some(b)) if a != b => {
+                        println!("      {key}: {a} → {b}");
+                    }
+                    (None, Some(b)) => {
+                        println!("      {key}: (nuevo) → {b}");
+                    }
+                    (Some(a), None) => {
+                        println!("      {key}: {a} → (eliminado)");
+                    }
+                    _ => {}
+                }
+            }
+        } else if c.kind == ChangeKind::Added {
+            if let Some(after) = &c.after {
+                if let Some(sym) = after.get("symbol") {
+                    println!("      símbolo: {sym}");
+                }
+            }
+        }
+    }
+
+    // Nets
+    if !view.report.nets_added.is_empty() {
+        println!();
+        for net in &view.report.nets_added {
+            println!("  + net:{net}");
+        }
+    }
+    if !view.report.nets_removed.is_empty() {
+        if view.report.nets_added.is_empty() { println!(); }
+        for net in &view.report.nets_removed {
+            println!("  - net:{net}");
+        }
+    }
+
     Ok(())
 }
 
