@@ -5,14 +5,15 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde_json::json;
 
 use crate::adapters::xschem_driver::XschemDriver;
-use crate::core::analyzer::analyze_diff;
+use crate::core::diff_view::{summarize_changes, DiffView};
 use crate::core::driver::RikuDriver;
 use crate::core::git_service::GitService;
-use crate::core::models::{ChangeKind, ComponentDiff, DiffReport};
+use crate::core::models::{ChangeKind, DiffReport};
 use crate::core::ports::GitRepository;
 use crate::core::registry::get_drivers;
 use crate::core::svg_annotator::annotate;
-use crate::parsers::xschem::parse;
+
+// ─── CLI types ───────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum OutputFormat {
@@ -22,11 +23,7 @@ pub enum OutputFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "riku",
-    author = "Ariel Amado Frias Rojas",
-    about = "Riku - VCS semantico para diseno de chips"
-)]
+#[command(name = "riku", about = "Riku - VCS semantico para diseno de chips")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -54,11 +51,12 @@ enum Commands {
         #[arg(short = 's', long)]
         semantic: bool,
     },
-    /// Verifica que herramientas externas esten disponibles.
+    /// Verifica que el entorno este correctamente configurado.
     Doctor {
         #[arg(short, long, default_value = ".")]
         repo: PathBuf,
     },
+    /// Renderiza un archivo .sch a SVG.
     Render { file: PathBuf },
     /// Abre la GUI de escritorio.
     Gui { file: Option<PathBuf> },
@@ -69,24 +67,19 @@ enum Commands {
     },
 }
 
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
 
     let result = match cli.command {
         None => run_shell(PathBuf::from(".")),
-        Some(Commands::Diff {
-            commit_a,
-            commit_b,
-            file_path,
-            repo,
-            format,
-        }) => run_diff(repo, &commit_a, &commit_b, &file_path, format),
-        Some(Commands::Log {
-            file_path,
-            repo,
-            limit,
-            semantic,
-        }) => run_log(repo, file_path.as_deref(), limit, semantic),
+        Some(Commands::Diff { commit_a, commit_b, file_path, repo, format }) => {
+            run_diff(repo, &commit_a, &commit_b, &file_path, format)
+        }
+        Some(Commands::Log { file_path, repo, limit, semantic }) => {
+            run_log(repo, file_path.as_deref(), limit, semantic)
+        }
         Some(Commands::Doctor { repo }) => run_doctor(repo),
         Some(Commands::Render { file }) => run_render(file),
         Some(Commands::Gui { file }) => run_gui(file),
@@ -102,6 +95,8 @@ pub fn run() -> ExitCode {
     }
 }
 
+// ─── Diff ────────────────────────────────────────────────────────────────────
+
 fn run_diff(
     repo: PathBuf,
     commit_a: &str,
@@ -109,116 +104,82 @@ fn run_diff(
     file_path: &str,
     format: OutputFormat,
 ) -> Result<(), String> {
-    let report = analyze_diff(&repo, commit_a, commit_b, file_path).map_err(|e| e.to_string())?;
+    let driver = XschemDriver::new();
+    let view = DiffView::from_commits(&repo, commit_a, commit_b, file_path, &driver, |b| {
+        crate::parsers::xschem::parse(b)
+    })
+    .map_err(|e| e.to_string())?;
 
-    for warning in &report.warnings {
-        eprintln!("[!] {warning}");
+    for w in &view.warnings {
+        eprintln!("[!] {w}");
     }
 
     match format {
-        OutputFormat::Json => {
-            let payload = json!({
-                "file_type": report.file_type,
-                "warnings": report.warnings,
-                "changes": report.changes,
-            });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
-            );
-            Ok(())
-        }
-        OutputFormat::Visual => run_visual(repo, commit_a, commit_b, file_path, &report),
-        OutputFormat::Text => {
-            if report.is_empty() {
-                println!("Sin cambios semanticos.");
-                return Ok(());
-            }
-
-            println!("Archivo: {file_path}  ({})", report.file_type);
-            println!("Cambios: {}", report.changes.len());
-            println!();
-            for change in &report.changes {
-                let cosmetic = if change.cosmetic { "  [cosmetico]" } else { "" };
-                println!("  {:<10} {}{cosmetic}", change.kind, change.element);
-            }
-            Ok(())
-        }
+        OutputFormat::Text => present_text(&view, file_path),
+        OutputFormat::Json => present_json(&view, file_path),
+        OutputFormat::Visual => present_visual(commit_a, commit_b, file_path, &view),
     }
 }
 
-fn run_visual(
-    repo: PathBuf,
+fn present_text(view: &DiffView, file_path: &str) -> Result<(), String> {
+    if view.report.is_empty() {
+        println!("Sin cambios semanticos.");
+        return Ok(());
+    }
+    println!("Archivo: {file_path}");
+    println!("Cambios: {}", view.report.components.len());
+    println!();
+    for c in &view.report.components {
+        let cosmetic = if c.cosmetic { "  [cosmetico]" } else { "" };
+        println!("  {:<10} {}{cosmetic}", c.kind, c.name);
+    }
+    Ok(())
+}
+
+fn present_json(view: &DiffView, file_path: &str) -> Result<(), String> {
+    let payload = json!({
+        "file": file_path,
+        "warnings": view.warnings,
+        "components": view.report.components,
+        "nets_added": view.report.nets_added,
+        "nets_removed": view.report.nets_removed,
+        "is_move_all": view.report.is_move_all,
+    });
+    println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+    Ok(())
+}
+
+fn present_visual(
     commit_a: &str,
     commit_b: &str,
     file_path: &str,
-    report: &crate::core::driver::DriverDiffReport,
+    view: &DiffView,
 ) -> Result<(), String> {
-    let svc = GitService::open(&repo).map_err(|e| e.to_string())?;
-    let driver = XschemDriver::new();
+    // Panel B: estado actual con anotaciones de todos los cambios
+    let annotated_b = annotate(&view.svg_b, &view.sch_b, &view.report, view.sch_a.as_ref());
 
-    let content_b =
-        GitRepository::get_blob(&svc, commit_b, file_path).map_err(|e| e.to_string())?;
-    let sch_b = parse(&content_b);
-    let svg_b_path = driver
-        .render(&content_b, file_path)
-        .ok_or_else(|| "Render del commit B no disponible.".to_string())?;
-    let svg_b = std::fs::read_to_string(&svg_b_path).map_err(|e| e.to_string())?;
-
-    let (svg_a, sch_a) = match GitRepository::get_blob(&svc, commit_a, file_path) {
-        Ok(content_a) => {
-            let sch = parse(&content_a);
-            let svg_path = driver.render(&content_a, file_path);
-            let svg = svg_path.and_then(|p| std::fs::read_to_string(&p).ok());
-            (svg, Some(sch))
-        }
-        Err(_) => (None, None),
-    };
-
-    let diff_report = driver_report_to_diff_report(report);
-
-    let annotated_b = annotate(&svg_b, &sch_b, &diff_report, sch_a.as_ref());
-    let panel_a = svg_a
-        .as_deref()
-        .map(|svg| {
-            // Para el panel A mostramos el esquemático anterior sin anotaciones de cambio,
-            // solo marcamos en gris los componentes que desaparecerán.
-            let removed_report = DiffReport {
-                components: diff_report
-                    .components
-                    .iter()
+    // Panel A: estado anterior con solo los removidos marcados
+    let panel_a = match &view.svg_a {
+        Some(svg) => {
+            let removed_only = DiffReport {
+                components: view.report.components.iter()
                     .filter(|c| c.kind == ChangeKind::Removed)
                     .cloned()
                     .collect(),
-                nets_added: vec![],
-                nets_removed: diff_report.nets_removed.clone(),
-                is_move_all: false,
+                nets_removed: view.report.nets_removed.clone(),
+                ..Default::default()
             };
-            if let Some(sch_a) = sch_a.as_ref() {
-                annotate(svg, sch_a, &removed_report, None)
-            } else {
-                svg.to_string()
+            match &view.sch_a {
+                Some(sch_a) => annotate(svg, sch_a, &removed_only, None),
+                None => svg.clone(),
             }
-        })
-        .unwrap_or_else(|| {
-            "<p style='color:#888'>Archivo nuevo — no existe en el commit anterior</p>".to_string()
-        });
+        }
+        None => "<p style='color:#888'>Archivo nuevo — no existe en el commit anterior</p>"
+            .to_string(),
+    };
 
     let html = build_diff_html(commit_a, commit_b, file_path, &panel_a, &annotated_b);
-
-    let mut tmp = tempfile::Builder::new()
-        .suffix(".html")
-        .tempfile()
-        .map_err(|e| e.to_string())?;
-    std::io::Write::write_all(&mut tmp, html.as_bytes()).map_err(|e| e.to_string())?;
-    let out_path = tmp
-        .into_temp_path()
-        .keep()
-        .map_err(|e| e.error.to_string())?;
-
-    println!("Diff visual: {}", out_path.display());
-    open_file(&out_path)?;
-    Ok(())
+    write_and_open_html(&html)
 }
 
 fn build_diff_html(
@@ -272,127 +233,30 @@ fn build_diff_html(
     )
 }
 
+fn write_and_open_html(html: &str) -> Result<(), String> {
+    let mut tmp = tempfile::Builder::new()
+        .suffix(".html")
+        .tempfile()
+        .map_err(|e| e.to_string())?;
+    std::io::Write::write_all(&mut tmp, html.as_bytes()).map_err(|e| e.to_string())?;
+    let path = tmp.into_temp_path().keep().map_err(|e| e.error.to_string())?;
+    println!("Diff visual: {}", path.display());
+    open_file(&path)
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+
 fn run_render(file: PathBuf) -> Result<(), String> {
     let content = std::fs::read(&file).map_err(|e| e.to_string())?;
     let driver = XschemDriver::new();
-    let path_hint = file.to_string_lossy();
     let svg_path = driver
-        .render(&content, &path_hint)
+        .render(&content, &file.to_string_lossy())
         .ok_or_else(|| "No se pudo renderizar el archivo.".to_string())?;
     println!("SVG: {}", svg_path.display());
-    open_file(&svg_path)?;
-    Ok(())
+    open_file(&svg_path)
 }
 
-fn run_gui(file: Option<PathBuf>) -> Result<(), String> {
-    let args: Vec<std::ffi::OsString> =
-        file.into_iter().map(|path| path.into_os_string()).collect();
-
-    match Command::new("riku-gui").args(&args).status() {
-        Ok(status) => {
-            return if status.success() {
-                Ok(())
-            } else {
-                Err(format!("riku-gui finalizó con error: {status}"))
-            };
-        }
-        Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
-            return Err(err.to_string());
-        }
-        Err(_) => {}
-    }
-
-    if let Some(gui_bin) = locate_gui_binary() {
-        let status = Command::new(gui_bin)
-            .args(&args)
-            .status()
-            .map_err(|e| e.to_string())?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(format!("riku-gui finalizó con error: {status}"))
-        };
-    }
-
-    let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or_else(|| "No se pudo resolver la raíz del workspace.".to_string())?;
-
-    let mut cargo = Command::new("cargo");
-    cargo
-        .arg("run")
-        .arg("--package")
-        .arg("riku-gui")
-        .arg("--bin")
-        .arg("riku-gui")
-        .current_dir(workspace_root);
-    if !args.is_empty() {
-        cargo.arg("--");
-        cargo.args(&args);
-    }
-
-    let status = cargo.status().map_err(|e| e.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("No se pudo iniciar riku-gui: {status}"))
-    }
-}
-
-fn locate_gui_binary() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("RIKU_GUI_BIN") {
-        let candidate = PathBuf::from(path);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-    }
-
-    let exe = std::env::current_exe().ok()?;
-    let bin_name = format!("riku-gui{}", std::env::consts::EXE_SUFFIX);
-    let sibling = exe.parent()?.join(bin_name);
-    if sibling.exists() {
-        return Some(sibling);
-    }
-
-    None
-}
-
-fn open_file(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path.to_string_lossy()])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-        match Command::new("xdg-open")
-            .env("DISPLAY", &display)
-            .arg(path)
-            .spawn()
-        {
-            Ok(_) => {}
-            Err(_) => {
-                eprintln!("[!] No se pudo abrir el SVG automaticamente.");
-                eprintln!("    Abrelo manualmente: {}", path.display());
-            }
-        }
-        Ok(())
-    }
-}
+// ─── Log ─────────────────────────────────────────────────────────────────────
 
 fn run_log(
     repo: PathBuf,
@@ -416,23 +280,20 @@ fn run_log(
             commit.message.chars().take(60).collect::<String>()
         );
 
-        if semantic && file_path.is_some() && idx + 1 < commits.len() {
-            if let Some(file_path) = file_path {
-                if let Ok(report) =
-                    analyze_diff(&repo, &commits[idx + 1].oid, &commit.oid, file_path)
-                {
-                    let (added, removed, modified) = summarize_changes(&report);
-                    if added + removed + modified > 0 {
+        if semantic {
+            if let Some(fp) = file_path {
+                if idx + 1 < commits.len() {
+                    if let Ok(report) = crate::core::analyzer::analyze_diff(
+                        &repo,
+                        &commits[idx + 1].oid,
+                        &commit.oid,
+                        fp,
+                    ) {
+                        let (added, removed, modified) = summarize_changes(&report.changes);
                         let mut parts = Vec::new();
-                        if added > 0 {
-                            parts.push(format!("+{added}"));
-                        }
-                        if removed > 0 {
-                            parts.push(format!("-{removed}"));
-                        }
-                        if modified > 0 {
-                            parts.push(format!("~{modified}"));
-                        }
+                        if added > 0 { parts.push(format!("+{added}")); }
+                        if removed > 0 { parts.push(format!("-{removed}")); }
+                        if modified > 0 { parts.push(format!("~{modified}")); }
                         if !parts.is_empty() {
                             println!("           {}", parts.join("  "));
                         }
@@ -441,191 +302,51 @@ fn run_log(
             }
         }
     }
-
     Ok(())
 }
 
-fn driver_report_to_diff_report(report: &crate::core::driver::DriverDiffReport) -> DiffReport {
-    DiffReport {
-        components: report
-            .changes
-            .iter()
-            .filter(|c| !c.element.starts_with("net:") && c.element != "layout")
-            .map(|c| ComponentDiff {
-                name: c.element.clone(),
-                kind: c.kind.clone(),
-                cosmetic: c.cosmetic,
-                before: c.before.clone(),
-                after: c.after.clone(),
-            })
-            .collect(),
-        nets_added: report
-            .changes
-            .iter()
-            .filter(|c| c.kind == ChangeKind::Added && c.element.starts_with("net:"))
-            .map(|c| c.element.trim_start_matches("net:").to_string())
-            .collect(),
-        nets_removed: report
-            .changes
-            .iter()
-            .filter(|c| c.kind == ChangeKind::Removed && c.element.starts_with("net:"))
-            .map(|c| c.element.trim_start_matches("net:").to_string())
-            .collect(),
-        is_move_all: report
-            .changes
-            .iter()
-            .any(|c| c.element == "layout" && c.cosmetic),
-    }
-}
-
-fn summarize_changes(report: &crate::core::driver::DriverDiffReport) -> (usize, usize, usize) {
-    let added = report
-        .changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Added && !c.cosmetic)
-        .count();
-    let removed = report
-        .changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Removed && !c.cosmetic)
-        .count();
-    let modified = report
-        .changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Modified && !c.cosmetic)
-        .count();
-    (added, removed, modified)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{driver_report_to_diff_report, summarize_changes};
-    use crate::core::driver::{DiffEntry, DriverDiffReport};
-    use crate::core::models::{ChangeKind, FileFormat};
-
-    #[test]
-    fn translates_driver_report_to_diff_report() {
-        let report = DriverDiffReport {
-            file_type: FileFormat::Xschem,
-            changes: vec![
-                DiffEntry {
-                    kind: ChangeKind::Added,
-                    element: "R1".to_string(),
-                    before: None,
-                    after: Some(
-                        std::iter::once(("value".to_string(), "10k".to_string())).collect(),
-                    ),
-                    cosmetic: false,
-                },
-                DiffEntry {
-                    kind: ChangeKind::Added,
-                    element: "net:Vdd".to_string(),
-                    before: None,
-                    after: None,
-                    cosmetic: false,
-                },
-                DiffEntry {
-                    kind: ChangeKind::Modified,
-                    element: "layout".to_string(),
-                    before: None,
-                    after: None,
-                    cosmetic: true,
-                },
-            ],
-            visual_a: None,
-            visual_b: None,
-            warnings: vec![],
-        };
-
-        let diff = driver_report_to_diff_report(&report);
-        assert_eq!(diff.components.len(), 1);
-        assert_eq!(diff.components[0].name, "R1");
-        assert_eq!(diff.nets_added, vec!["Vdd".to_string()]);
-        assert!(diff.is_move_all);
-    }
-
-    #[test]
-    fn counts_only_non_cosmetic_changes() {
-        let report = DriverDiffReport {
-            file_type: FileFormat::Xschem,
-            changes: vec![
-                DiffEntry {
-                    kind: ChangeKind::Added,
-                    element: "R1".to_string(),
-                    before: None,
-                    after: None,
-                    cosmetic: true,
-                },
-                DiffEntry {
-                    kind: ChangeKind::Removed,
-                    element: "C1".to_string(),
-                    before: None,
-                    after: None,
-                    cosmetic: false,
-                },
-                DiffEntry {
-                    kind: ChangeKind::Modified,
-                    element: "M1".to_string(),
-                    before: None,
-                    after: None,
-                    cosmetic: false,
-                },
-            ],
-            visual_a: None,
-            visual_b: None,
-            warnings: vec![],
-        };
-
-        assert_eq!(summarize_changes(&report), (0, 1, 1));
-    }
-}
+// ─── Doctor ──────────────────────────────────────────────────────────────────
 
 fn run_doctor(repo: PathBuf) -> Result<(), String> {
     println!("\nRiku Doctor — Diagnóstico del Entorno\n");
-
     let mut any_error = false;
 
-    // 1. Repositorio Git
     println!("--- Repositorio Git ---");
     match git2::Repository::discover(&repo) {
         Ok(r) => println!("  [ok]  {}", r.workdir().unwrap_or(r.path()).display()),
         Err(_) => println!("  [!]  No detectado — diff/log no funcionarán"),
     }
 
-    // 2. PDK
     println!("\n--- PDK ---");
     let pdk_root = std::env::var("PDK_ROOT").ok();
     let pdk_name = std::env::var("PDK").ok();
-    let tools   = std::env::var("TOOLS").ok();
+    let tools = std::env::var("TOOLS").ok();
 
-    // .xschemrc
     let xschemrc_local = std::path::PathBuf::from(".xschemrc");
-    let xschemrc_home  = dirs::home_dir().map(|h| h.join(".xschemrc"));
+    let xschemrc_home = dirs::home_dir().map(|h| h.join(".xschemrc"));
     let xschemrc = if xschemrc_local.exists() {
-        Some(xschemrc_local.clone())
+        Some(xschemrc_local)
     } else {
         xschemrc_home.filter(|p| p.exists())
     };
 
     match &xschemrc {
         Some(p) => println!("  [ok]  .xschemrc: {}", p.display()),
-        None    => println!("  [--]  .xschemrc: no encontrado"),
+        None => println!("  [--]  .xschemrc: no encontrado"),
     }
 
-    // $PDK_ROOT / $PDK
     match (&pdk_root, &pdk_name) {
         (Some(root), Some(pdk)) => {
             let sym = std::path::Path::new(root).join(pdk).join("libs.tech/xschem");
             if sym.exists() {
                 println!("  [ok]  $PDK_ROOT/$PDK → {}", sym.display());
             } else {
-                println!("  [!]  $PDK_ROOT/$PDK configurado pero símbolos no encontrados: {}", sym.display());
+                println!("  [!]  $PDK_ROOT/$PDK configurado pero ruta no encontrada: {}", sym.display());
             }
         }
         _ => println!("  [--]  $PDK_ROOT / $PDK: no configurados"),
     }
 
-    // $TOOLS
     match &tools {
         Some(t) => {
             let devices = std::path::Path::new(t)
@@ -633,28 +354,24 @@ fn run_doctor(repo: PathBuf) -> Result<(), String> {
             if devices.exists() {
                 println!("  [ok]  $TOOLS → {}", devices.display());
             } else {
-                println!("  [!]  $TOOLS configurado pero devices no encontrados: {}", devices.display());
+                println!("  [!]  $TOOLS configurado pero devices no encontrado: {}", devices.display());
             }
         }
         None => println!("  [--]  $TOOLS: no configurado"),
     }
 
-    // Resumen: ¿hay alguna fuente de símbolos?
     let has_symbols = xschemrc.is_some()
         || pdk_root.as_ref().zip(pdk_name.as_ref()).map(|(r, p)| {
             std::path::Path::new(r).join(p).join("libs.tech/xschem").exists()
         }).unwrap_or(false)
         || tools.as_ref().map(|t| {
-            std::path::Path::new(t)
-                .join("xschem/share/xschem/xschem_library/devices")
-                .exists()
+            std::path::Path::new(t).join("xschem/share/xschem/xschem_library/devices").exists()
         }).unwrap_or(false);
 
     if !has_symbols {
         println!("  [!]  Sin fuente de símbolos — los componentes se renderizarán como cajas vacías");
     }
 
-    // 3. Drivers
     println!("\n--- Drivers ---");
     for driver in get_drivers() {
         let info = driver.info();
@@ -662,11 +379,8 @@ fn run_doctor(repo: PathBuf) -> Result<(), String> {
         println!("  {status}  {:10} {}", info.name, info.version);
     }
 
-    // 4. Caché
     println!("\n--- Sistema ---");
-    let cache = dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("riku");
+    let cache = dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("riku");
     if std::fs::create_dir_all(&cache).is_ok() {
         println!("  [ok]  Caché: {}", cache.display());
     } else {
@@ -678,10 +392,52 @@ fn run_doctor(repo: PathBuf) -> Result<(), String> {
     if any_error {
         return Err("Se detectaron problemas críticos en el entorno.".to_string());
     }
-
     println!("Entorno listo.\n");
     Ok(())
 }
+
+// ─── GUI ─────────────────────────────────────────────────────────────────────
+
+fn run_gui(file: Option<PathBuf>) -> Result<(), String> {
+    let args: Vec<std::ffi::OsString> =
+        file.into_iter().map(|p| p.into_os_string()).collect();
+
+    if let Some(bin) = locate_gui_binary() {
+        let status = Command::new(bin).args(&args).status().map_err(|e| e.to_string())?;
+        return if status.success() { Ok(()) } else {
+            Err(format!("riku-gui finalizó con error: {status}"))
+        };
+    }
+
+    let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or_else(|| "No se pudo resolver la raíz del workspace.".to_string())?;
+
+    let mut cargo = Command::new("cargo");
+    cargo.args(["run", "--package", "riku-gui", "--bin", "riku-gui"])
+        .current_dir(workspace_root);
+    if !args.is_empty() {
+        cargo.arg("--").args(&args);
+    }
+
+    let status = cargo.status().map_err(|e| e.to_string())?;
+    if status.success() { Ok(()) } else {
+        Err(format!("No se pudo iniciar riku-gui: {status}"))
+    }
+}
+
+fn locate_gui_binary() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("RIKU_GUI_BIN") {
+        let candidate = PathBuf::from(path);
+        if candidate.exists() { return Some(candidate); }
+    }
+    let exe = std::env::current_exe().ok()?;
+    let bin_name = format!("riku-gui{}", std::env::consts::EXE_SUFFIX);
+    let sibling = exe.parent()?.join(bin_name);
+    if sibling.exists() { Some(sibling) } else { None }
+}
+
+// ─── Shell ───────────────────────────────────────────────────────────────────
 
 const LOGO: &str = r#"
     ██████╗ ██╗██╗  ██╗██╗   ██╗
@@ -691,29 +447,6 @@ const LOGO: &str = r#"
     ██║  ██║██║██║  ██╗╚██████╔╝
     ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝ ╚═════╝
 "#;
-
-fn shell_status_line(repo: &std::path::Path) -> String {
-    let version = env!("CARGO_PKG_VERSION");
-
-    let pdk = match (std::env::var("PDK_ROOT").ok(), std::env::var("PDK").ok()) {
-        (Some(root), Some(pdk)) => {
-            let sym = std::path::Path::new(&root).join(&pdk).join("libs.tech/xschem");
-            if sym.exists() {
-                format!("PDK: {} [ok]", pdk)
-            } else {
-                "PDK: no detectado".to_string()
-            }
-        }
-        _ => "PDK: no detectado".to_string(),
-    };
-
-    let repo_str = git2::Repository::discover(repo)
-        .ok()
-        .and_then(|r| r.workdir().map(|p| p.display().to_string()))
-        .unwrap_or_else(|| "repo: no encontrado".to_string());
-
-    format!("  v{}  ·  {}  ·  {}", version, pdk, repo_str)
-}
 
 struct ShellContext {
     cwd: PathBuf,
@@ -752,7 +485,7 @@ impl ShellContext {
                 };
                 match p.canonicalize() {
                     Ok(p) => p,
-                    Err(_) => { println!("  [!] No existe: {}", t); return; }
+                    Err(_) => { println!("  [!] No existe: {t}"); return; }
                 }
             }
             None => self.cwd.clone(),
@@ -764,11 +497,10 @@ impl ShellContext {
         };
         entries.sort_by_key(|e| e.file_name());
 
-        let mut found = false;
         println!();
+        let mut found = false;
         for entry in &entries {
-            let path = entry.path();
-            if path.is_dir() {
+            if entry.path().is_dir() {
                 println!("  {:>2}  {}/", "", entry.file_name().to_string_lossy());
                 found = true;
             }
@@ -779,11 +511,10 @@ impl ShellContext {
                 let in_git = self.repo.as_ref().map(|r| {
                     r.workdir()
                         .and_then(|wd| path.strip_prefix(wd).ok())
-                        .map(|_| true)
-                        .unwrap_or(false)
+                        .is_some()
                 }).unwrap_or(false);
                 let tag = if in_git { "[git]" } else { "     " };
-                println!("  {}  {}", tag, entry.file_name().to_string_lossy());
+                println!("  {tag}  {}", entry.file_name().to_string_lossy());
                 found = true;
             }
         }
@@ -798,7 +529,7 @@ impl ShellContext {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| self.cwd.display().to_string());
         let repo_mark = if self.repo.is_some() { " (git)" } else { "" };
-        format!("riku {}{}> ", dir, repo_mark)
+        format!("riku {dir}{repo_mark}> ")
     }
 
     fn repo_path(&self) -> PathBuf {
@@ -807,34 +538,61 @@ impl ShellContext {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| self.cwd.clone())
     }
+
+    fn resolve_file(&self, f: &str) -> String {
+        let abs = if std::path::Path::new(f).is_absolute() {
+            PathBuf::from(f)
+        } else {
+            self.cwd.join(f)
+        };
+        let repo = self.repo_path();
+        abs.strip_prefix(&repo)
+            .map(|rel| rel.to_string_lossy().to_string())
+            .unwrap_or_else(|_| abs.to_string_lossy().to_string())
+    }
+}
+
+fn shell_status_line(ctx: &ShellContext) -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let pdk = match (std::env::var("PDK_ROOT").ok(), std::env::var("PDK").ok()) {
+        (Some(root), Some(pdk)) => {
+            let sym = std::path::Path::new(&root).join(&pdk).join("libs.tech/xschem");
+            if sym.exists() { format!("PDK: {pdk} [ok]") } else { "PDK: no detectado".to_string() }
+        }
+        _ => "PDK: no detectado".to_string(),
+    };
+    let repo_str = git2::Repository::discover(&ctx.cwd)
+        .ok()
+        .and_then(|r| r.workdir().map(|p| p.display().to_string()))
+        .unwrap_or_else(|| "repo: no encontrado".to_string());
+    format!("  v{version}  ·  {pdk}  ·  {repo_str}")
 }
 
 fn run_shell(_repo: PathBuf) -> Result<(), String> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let mut ctx = ShellContext::new(cwd);
+    let ctx = ShellContext::new(cwd);
 
-    print!("{}", LOGO);
-    println!("{}", shell_status_line(&ctx.repo_path()));
+    print!("{LOGO}");
+    println!("{}", shell_status_line(&ctx));
     if ctx.repo.is_none() {
         println!("  [!] No se detectó repositorio Git. Usa 'cd <ruta>' para navegar a uno.");
     }
     println!("  'help' para ver los comandos. 'exit' para salir.\n");
 
+    // ctx se mueve al loop; necesitamos mutabilidad
+    let mut ctx = ctx;
     let mut rl = rustyline::DefaultEditor::new().map_err(|e| e.to_string())?;
 
     loop {
         let prompt = ctx.prompt();
         let line = match rl.readline(&prompt) {
             Ok(l) => l,
-            Err(rustyline::error::ReadlineError::Interrupted) => break,
-            Err(rustyline::error::ReadlineError::Eof) => break,
+            Err(rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof) => break,
             Err(e) => return Err(e.to_string()),
         };
 
         let line = line.trim().to_string();
-        if line.is_empty() {
-            continue;
-        }
+        if line.is_empty() { continue; }
         let _ = rl.add_history_entry(&line);
 
         let mut parts = line.splitn(2, ' ');
@@ -843,100 +601,112 @@ fn run_shell(_repo: PathBuf) -> Result<(), String> {
 
         match cmd {
             "exit" | "quit" | "q" => break,
-            "help" => {
-                println!();
-                println!("  Navegación:");
-                println!("    ls [ruta]                                     listar archivos .sch");
-                println!("    cd <ruta>                                     cambiar directorio");
-                println!();
-                println!("  Git:");
-                println!("    log [archivo.sch] [--semantic] [--limit <n>]  historial de commits");
-                println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
-                println!("    diff ... --format visual                      diff visual en HTML");
-                println!();
-                println!("  Render:");
-                println!("    render <archivo.sch>                          renderizar a SVG");
-                println!("    gui [archivo.gds]                              abrir visor de escritorio");
-                println!();
-                println!("  Entorno:");
-                println!("    doctor                                        verificar PDK y repo");
-                println!("    exit                                          salir");
-                println!();
-            }
+            "help" => print_shell_help(),
             "cd" => ctx.cd(if rest.is_empty() { "." } else { rest }),
             "ls" => ctx.ls(if rest.is_empty() { None } else { Some(rest) }),
-            _ => {
-                let mut args = vec!["riku"];
-                args.extend(line.split_whitespace());
-                match Cli::try_parse_from(&args) {
-                    Ok(parsed) => {
-                        let repo_path = ctx.repo_path();
-                        let result = match parsed.command {
-                            None | Some(Commands::Shell { .. }) => {
-                                println!("  Ya estás en el shell.");
-                                Ok(())
-                            }
-                            Some(Commands::Diff { commit_a, commit_b, file_path, repo: r, format }) => {
-                                let effective_repo = if r == PathBuf::from(".") { repo_path.clone() } else { r };
-                                let abs = if std::path::Path::new(&file_path).is_absolute() {
-                                    PathBuf::from(&file_path)
-                                } else {
-                                    ctx.cwd.join(&file_path)
-                                };
-                                let effective_file = abs.strip_prefix(&effective_repo)
-                                    .map(|rel| rel.to_string_lossy().to_string())
-                                    .unwrap_or_else(|_| abs.to_string_lossy().to_string());
-                                run_diff(effective_repo, &commit_a, &commit_b, &effective_file, format)
-                            }
-                            Some(Commands::Log { file_path, repo: r, limit, semantic }) => {
-                                let effective_repo = if r == PathBuf::from(".") { repo_path.clone() } else { r };
-                                let effective_file = file_path.map(|f| {
-                                    let abs = if std::path::Path::new(&f).is_absolute() {
-                                        PathBuf::from(&f)
-                                    } else {
-                                        ctx.cwd.join(&f)
-                                    };
-                                    abs.strip_prefix(&effective_repo)
-                                        .map(|rel| rel.to_string_lossy().to_string())
-                                        .unwrap_or_else(|_| abs.to_string_lossy().to_string())
-                                });
-                                run_log(effective_repo, effective_file.as_deref(), limit, semantic)
-                            }
-                            Some(Commands::Doctor { repo: r }) => {
-                                let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
-                                run_doctor(effective_repo)
-                            }
-                            Some(Commands::Render { file }) => {
-                                let effective = if file == PathBuf::from(file.to_string_lossy().as_ref())
-                                    && !file.to_string_lossy().contains('/')
-                                    && !file.to_string_lossy().contains('\\') {
-                                    ctx.cwd.join(&file)
-                                } else { file };
-                                run_render(effective)
-                            }
-                            Some(Commands::Gui { file }) => {
-                                let effective = file.map(|file| {
-                                    if file == PathBuf::from(file.to_string_lossy().as_ref())
-                                        && !file.to_string_lossy().contains('/')
-                                        && !file.to_string_lossy().contains('\\') {
-                                        ctx.cwd.join(&file)
-                                    } else {
-                                        file
-                                    }
-                                });
-                                run_gui(effective)
-                            }
-                        };
-                        if let Err(e) = result {
-                            eprintln!("  Error: {e}");
-                        }
-                    }
-                    Err(e) => println!("  {}", e.to_string().lines().next().unwrap_or("comando no reconocido")),
-                }
-            }
+            _ => dispatch_shell_command(&mut ctx, &line),
         }
     }
 
     println!("\n  Hasta luego.\n");
     Ok(())
+}
+
+fn print_shell_help() {
+    println!();
+    println!("  Navegación:");
+    println!("    ls [ruta]                                     listar archivos .sch");
+    println!("    cd <ruta>                                     cambiar directorio");
+    println!();
+    println!("  Git:");
+    println!("    log [archivo.sch] [--semantic] [--limit <n>]  historial de commits");
+    println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
+    println!("    diff ... --format visual                      diff visual en HTML");
+    println!();
+    println!("  Render:");
+    println!("    render <archivo.sch>                          renderizar a SVG");
+    println!("    gui [archivo.gds]                             abrir visor de escritorio");
+    println!();
+    println!("  Entorno:");
+    println!("    doctor                                        verificar PDK y repo");
+    println!("    exit                                          salir");
+    println!();
+}
+
+fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
+    let mut args = vec!["riku"];
+    args.extend(line.split_whitespace());
+
+    match Cli::try_parse_from(&args) {
+        Ok(parsed) => {
+            let repo_path = ctx.repo_path();
+            let result = match parsed.command {
+                None | Some(Commands::Shell { .. }) => {
+                    println!("  Ya estás en el shell.");
+                    Ok(())
+                }
+                Some(Commands::Diff { commit_a, commit_b, file_path, repo: r, format }) => {
+                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                    let effective_file = ctx.resolve_file(&file_path);
+                    run_diff(effective_repo, &commit_a, &commit_b, &effective_file, format)
+                }
+                Some(Commands::Log { file_path, repo: r, limit, semantic }) => {
+                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                    let effective_file = file_path.as_deref().map(|f| ctx.resolve_file(f));
+                    run_log(effective_repo, effective_file.as_deref(), limit, semantic)
+                }
+                Some(Commands::Doctor { repo: r }) => {
+                    run_doctor(if r == PathBuf::from(".") { repo_path } else { r })
+                }
+                Some(Commands::Render { file }) => {
+                    let effective = if file.components().count() == 1 {
+                        ctx.cwd.join(&file)
+                    } else {
+                        file
+                    };
+                    run_render(effective)
+                }
+                Some(Commands::Gui { file }) => {
+                    let effective = file.map(|f| {
+                        if f.components().count() == 1 { ctx.cwd.join(&f) } else { f }
+                    });
+                    run_gui(effective)
+                }
+            };
+            if let Err(e) = result {
+                eprintln!("  Error: {e}");
+            }
+        }
+        Err(e) => {
+            println!("  {}", e.to_string().lines().next().unwrap_or("comando no reconocido"));
+        }
+    }
+}
+
+// ─── System open ─────────────────────────────────────────────────────────────
+
+fn open_file(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(path).spawn().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+        if Command::new("xdg-open").env("DISPLAY", &display).arg(path).spawn().is_err() {
+            eprintln!("[!] No se pudo abrir automáticamente. Abrelo manualmente: {}", path.display());
+        }
+        Ok(())
+    }
 }

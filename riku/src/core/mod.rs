@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod diff_view;
 pub mod driver;
 pub mod error;
 pub mod git_service;
