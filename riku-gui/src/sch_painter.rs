@@ -257,10 +257,9 @@ fn paint_diff_annotations(
     scene: &ResolvedScene,
     report: &DiffReport,
 ) {
+    // ── Componentes ───────────────────────────────────────────────────────────
     for comp in &report.components {
         let (fill, stroke) = annotation_colors(&comp.kind, comp.cosmetic);
-
-        // Recopilar todos los elementos de esta instancia para calcular su bbox
         let bbox = elements_bbox_for(scene, &comp.name);
         if let Some(b) = bbox {
             let min = world_to_screen(vp, rect, b.0, b.1);
@@ -268,8 +267,6 @@ fn paint_diff_annotations(
             let r = egui::Rect::from_min_max(min, max).expand(4.0);
             painter.rect_filled(r, 2.0, fill);
             painter.rect_stroke(r, 2.0, Stroke::new(1.5, stroke), StrokeKind::Outside);
-
-            // Etiqueta con el nombre
             painter.text(
                 r.left_top() + egui::vec2(2.0, -14.0),
                 egui::Align2::LEFT_BOTTOM,
@@ -277,6 +274,32 @@ fn paint_diff_annotations(
                 egui::FontId::monospace(11.0),
                 stroke,
             );
+        }
+    }
+
+    // ── Wires / nets ─────────────────────────────────────────────────────────
+    for (net_name, color) in report.nets_added.iter()
+        .map(|n| (n, Color32::from_rgb(0, 220, 0)))
+        .chain(report.nets_removed.iter().map(|n| (n, Color32::from_rgb(220, 0, 0))))
+    {
+        let mut labeled = false;
+        for (x1, y1, x2, y2, label) in &scene.wires {
+            let matches = label.as_deref().map(|l| l == net_name).unwrap_or(false);
+            if !matches { continue; }
+            let a = world_to_screen(vp, rect, *x1, *y1);
+            let b = world_to_screen(vp, rect, *x2, *y2);
+            painter.line_segment([a, b], Stroke::new(3.0, color));
+            if !labeled {
+                let mid = egui::pos2((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+                painter.text(
+                    mid + egui::vec2(0.0, -10.0),
+                    egui::Align2::CENTER_BOTTOM,
+                    net_name.as_str(),
+                    egui::FontId::monospace(10.0),
+                    color,
+                );
+                labeled = true;
+            }
         }
     }
 }
