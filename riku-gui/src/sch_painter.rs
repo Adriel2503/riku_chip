@@ -165,7 +165,6 @@ fn paint_element(
             }
         }
         Text { x, y, content, v_size, rotation, mirror, h_center, v_center, layer, .. } => {
-            let pos = world_to_screen(vp, rect, *x, *y);
             let font_size = (v_size * 50.0 * vp.scale).clamp(4.0, 2000.0) as f32;
             let color = layer_color(*layer);
             let font = egui::FontId::monospace(font_size);
