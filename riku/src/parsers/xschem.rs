@@ -38,10 +38,15 @@ pub fn parse(content: &[u8]) -> Schematic {
         xschem_viewer::fill_connectivity(&mut netlist, &scene, &xv_sch);
     }
 
-    // Index components by name for O(1) lookup of position/rotation
-    let comp_by_name: HashMap<&str, &xschem_viewer::models::Component> = xv_sch
+    // Index components by name — xschem stores the instance name in properties
+    // under keys "name", "Name", or as the first property value
+    let comp_by_name: HashMap<String, &xschem_viewer::models::Component> = xv_sch
         .components()
-        .filter_map(|c| c.properties.get("name").map(|n| (n.as_str(), c)))
+        .filter_map(|c| {
+            c.properties.get("name")
+                .or_else(|| c.properties.get("Name"))
+                .map(|n| (n.clone(), c))
+        })
         .collect();
 
     let mut sch = Schematic::default();
