@@ -10,6 +10,8 @@ use crate::sch_painter::{SchViewport, paint_sch};
 
 struct SchState {
     scene: xschem_viewer::ResolvedScene,
+    /// Escena del commit A para mostrar fantasmas de componentes movidos/eliminados
+    scene_a: Option<xschem_viewer::ResolvedScene>,
     viewport: SchViewport,
     diff: Option<riku::core::models::DiffReport>,
 }
@@ -111,7 +113,7 @@ impl RikuGuiApp {
         let mut viewport = SchViewport::default();
         let dummy = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
         viewport.fit_to(&scene, dummy);
-        self.sch = Some(SchState { scene, viewport, diff: None });
+        self.sch = Some(SchState { scene, scene_a: None, viewport, diff: None });
         Ok(())
     }
 
@@ -126,6 +128,11 @@ impl RikuGuiApp {
             .map_err(|e| e.to_string())?;
 
         let opts = sch_render_opts();
+
+        let sch_a = get_blob_content(repo, commit_a, &file_str)?;
+        let parsed_a = xschem_viewer::parser::parse(&sch_a).map_err(|e| e.to_string())?;
+        let scene_a = xschem_viewer::SceneBuilder::new(&opts).build(&parsed_a);
+
         let sch_content = get_blob_content(repo, commit_b, &file_str)?;
         let parsed = xschem_viewer::parser::parse(&sch_content).map_err(|e| e.to_string())?;
         let scene = xschem_viewer::SceneBuilder::new(&opts).build(&parsed);
@@ -135,7 +142,7 @@ impl RikuGuiApp {
         viewport.fit_to(&scene, dummy);
 
         self.selected_path = Some(file.to_path_buf());
-        self.sch = Some(SchState { scene, viewport, diff: Some(view.report) });
+        self.sch = Some(SchState { scene, scene_a: Some(scene_a), viewport, diff: Some(view.report) });
         Ok(())
     }
 }
@@ -259,7 +266,7 @@ impl eframe::App for RikuGuiApp {
                 }
 
                 ui.scope_builder(egui::UiBuilder::new().max_rect(response.rect), |ui| {
-                    paint_sch(ui, &sch.scene, &sch.viewport, sch.diff.as_ref());
+                    paint_sch(ui, &sch.scene, sch.scene_a.as_ref(), &sch.viewport, sch.diff.as_ref());
                 });
             } else {
                 ui.centered_and_justified(|ui| {

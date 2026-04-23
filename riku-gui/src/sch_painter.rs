@@ -62,10 +62,12 @@ fn layer_color(layer: i32) -> Color32 {
 // ─── Main paint function ──────────────────────────────────────────────────────
 
 /// Pinta el schematic con anotaciones de diff superpuestas.
+/// `scene_a` es el estado anterior (commit A) para mostrar fantasmas.
 /// `diff` puede ser None para mostrar solo el schematic sin anotaciones.
 pub fn paint_sch(
     ui: &mut egui::Ui,
     scene: &ResolvedScene,
+    scene_a: Option<&ResolvedScene>,
     vp: &SchViewport,
     diff: Option<&DiffReport>,
 ) {
@@ -86,7 +88,12 @@ pub fn paint_sch(
         return;
     }
 
-    // ── Primitivos del schematic ──────────────────────────────────────────────
+    // ── Fantasmas del commit A (componentes movidos/eliminados) ───────────────
+    if let (Some(a), Some(report)) = (scene_a, diff) {
+        paint_ghosts(&painter, vp, rect, a, report);
+    }
+
+    // ── Primitivos del schematic actual (commit B) ────────────────────────────
     for elem in &scene.elements {
         paint_element(&painter, vp, rect, elem);
     }
@@ -245,6 +252,82 @@ fn paint_element(
                 Color32::from_rgb(200, 80, 80),
             );
         }
+    }
+}
+
+// ─── Ghost render (commit A) ──────────────────────────────────────────────────
+
+fn paint_ghosts(
+    painter: &egui::Painter,
+    vp: &SchViewport,
+    rect: Rect,
+    scene_a: &ResolvedScene,
+    report: &DiffReport,
+) {
+    // Color fantasma: gris suficientemente claro sobre fondo oscuro, sin competir
+    let ghost = Color32::from_rgba_unmultiplied(75, 75, 85, 180);
+
+    for comp in &report.components {
+        // Solo componentes que cambiaron de posición (cosmetic) o fueron eliminados
+        let show = comp.cosmetic || matches!(comp.kind, riku::core::models::ChangeKind::Removed);
+        if !show { continue; }
+
+        let lookup = comp.name.split(" → ").next().unwrap_or(&comp.name);
+        for elem in &scene_a.elements {
+            if elem.component_id() != Some(lookup) { continue; }
+            paint_element_tinted(painter, vp, rect, elem, ghost);
+        }
+    }
+}
+
+fn paint_element_tinted(
+    painter: &egui::Painter,
+    vp: &SchViewport,
+    rect: Rect,
+    elem: &xschem_viewer::DrawElement,
+    color: Color32,
+) {
+    use xschem_viewer::DrawElement::*;
+    match elem {
+        Line { x1, y1, x2, y2, .. } => {
+            let a = world_to_screen(vp, rect, *x1, *y1);
+            let b = world_to_screen(vp, rect, *x2, *y2);
+            painter.line_segment([a, b], Stroke::new(1.0, color));
+        }
+        Rect { x, y, w, h, .. } => {
+            let min = world_to_screen(vp, rect, *x, *y);
+            let max = world_to_screen(vp, rect, x + w, y + h);
+            painter.rect_stroke(egui::Rect::from_min_max(min, max), 0.0, Stroke::new(1.0, color), StrokeKind::Outside);
+        }
+        Circle { cx, cy, r, .. } => {
+            let center = world_to_screen(vp, rect, *cx, *cy);
+            painter.circle_stroke(center, (*r * vp.scale) as f32, Stroke::new(1.0, color));
+        }
+        Arc { cx, cy, r, start_angle, sweep_angle, .. } => {
+            let steps = (sweep_angle.abs() / 5.0).ceil() as usize + 1;
+            let mut pts: Vec<egui::Pos2> = Vec::with_capacity(steps + 1);
+            for i in 0..=steps {
+                let angle_rad = -(start_angle + sweep_angle * i as f64 / steps as f64).to_radians();
+                pts.push(world_to_screen(vp, rect, cx + r * angle_rad.cos(), cy + r * angle_rad.sin()));
+            }
+            if pts.len() >= 2 {
+                painter.add(Shape::line(pts, Stroke::new(1.0, color)));
+            }
+        }
+        Polygon { points, .. } => {
+            let pts: Vec<egui::Pos2> = points.iter()
+                .map(|(wx, wy)| world_to_screen(vp, rect, *wx, *wy))
+                .collect();
+            if pts.len() >= 2 {
+                painter.add(Shape::line(pts, Stroke::new(1.0, color)));
+            }
+        }
+        Text { x, y, content, v_size, .. } => {
+            let pos = world_to_screen(vp, rect, *x, *y);
+            let font_size = (v_size * 50.0 * vp.scale).clamp(4.0, 2000.0) as f32;
+            painter.text(pos, egui::Align2::LEFT_TOP, content, egui::FontId::monospace(font_size), color);
+        }
+        MissingSymbol { .. } => {}
     }
 }
 
