@@ -27,7 +27,11 @@ sha2 = "0.11.0"
 tempfile = "3.27.0"
 thiserror = "2.0.18"
 rustyline = "14.0"
-xschem_viewer = { package = "xschem-viewer", git = "https://github.com/carloscl03/xschem-viewer-rust" }
+# Path local: mientras viewer-core no esté publicado en crates.io, la
+# dependencia transitiva `viewer-core` (via path relativo en xschem-viewer)
+# solo resuelve cuando ambos repos conviven como hermanos en el filesystem.
+# Se cumple en Desktop y Docker. Al publicar viewer-core, volver a git/tag.
+xschem_viewer = { package = "xschem-viewer", path = "../../xschem-viewer-rust" }
 
 [dev-dependencies]
 tempfile = "3.27.0"
