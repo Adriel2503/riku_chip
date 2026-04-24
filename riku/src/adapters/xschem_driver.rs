@@ -6,8 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::core::driver::{DiffEntry, DriverDiffReport, DriverInfo, RikuDriver};
 use crate::core::models::{ChangeKind, DriverKind, FileFormat};
-use crate::core::semantic_diff::diff as semantic_diff;
-use crate::parsers::xschem::detect_format;
+use crate::parsers::xschem::{detect_format, parse};
 
 pub struct XschemDriver {
     cached_info: std::sync::OnceLock<DriverInfo>,
@@ -81,7 +80,9 @@ impl RikuDriver for XschemDriver {
             return report;
         }
 
-        let result = semantic_diff(content_a, content_b);
+        let sch_a = parse(content_a);
+        let sch_b = parse(content_b);
+        let result = xschem_viewer::semantic::diff(&sch_a, &sch_b);
         for component in result.components {
             report.changes.push(DiffEntry {
                 kind: component.kind,
