@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
-    "gds-renderer",
-    # "gdstk/rust",  # pendiente: gdstk-rs no disponible aún
+    # "gds-renderer",  # depende de gdstk-rs (no disponible); descomentar cuando esté listo
+    # "gdstk/rust",    # pendiente: gdstk-rs no disponible aún
     "riku-gui",
     "viewer-core",
 ]
