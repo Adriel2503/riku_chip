@@ -202,7 +202,10 @@ fn paint_text(
     let font_size = (v_size * 50.0 * vp.scale).clamp(4.0, 2000.0) as f32;
     let font = egui::FontId::monospace(font_size);
 
-    // xschem: v_mirror y h_mirror derivan de la rotación/mirror
+    // xschem: v_mirror y h_mirror derivan de la rotación/mirror.
+    // La regla es que el texto NUNCA queda invertido — cuando la rotación
+    // lo dejaría al revés, se aplica un scale adicional para mantenerlo
+    // legible (base siempre hacia abajo o hacia la derecha).
     let v_mirror = rotation == 1 || rotation == 2;
     let h_mirror = if mirror == 1 { !v_mirror } else { v_mirror };
 
@@ -212,7 +215,18 @@ fn paint_text(
     // before-edge = top (factor 0), after-edge = bottom (factor 1), middle = 0.5
     let anchor_factor_y = if v_center { 0.5 } else if v_mirror { 1.0 } else { 0.0 };
 
-    let angle = (rotation as f32) * std::f32::consts::FRAC_PI_2;
+    // Ángulo visual en pantalla (Y-down, positivo = horario).
+    // Se elige el equivalente que deja el texto legible:
+    //   rotation=0 → horizontal normal           → 0
+    //   rotation=1 → vertical, base a la derecha → -π/2 (lee hacia arriba)
+    //   rotation=2 → horizontal con anchors flip → 0 (scale(-1)·scale(1,-1) = identidad visual)
+    //   rotation=3 → vertical, base a la izquierda → +π/2 (lee hacia abajo)
+    let angle = match rotation.rem_euclid(4) {
+        0 | 2 => 0.0,
+        1     => -std::f32::consts::FRAC_PI_2,
+        3     =>  std::f32::consts::FRAC_PI_2,
+        _     => 0.0,
+    };
     let (cos_a, sin_a) = (angle.cos(), angle.sin());
 
     let lines: Vec<&str> = content.lines().collect();
