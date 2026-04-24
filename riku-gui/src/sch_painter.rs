@@ -202,41 +202,34 @@ fn paint_text(
     let font_size = (v_size * 50.0 * vp.scale).clamp(4.0, 2000.0) as f32;
     let font = egui::FontId::monospace(font_size);
 
-    // xschem: v_mirror y h_mirror derivan de la rotación/mirror.
-    // La regla es que el texto NUNCA queda invertido — cuando la rotación
-    // lo dejaría al revés, se aplica un scale adicional para mantenerlo
-    // legible (base siempre hacia abajo o hacia la derecha).
-    let v_mirror = rotation == 1 || rotation == 2;
-    let h_mirror = if mirror == 1 { !v_mirror } else { v_mirror };
+    // Delegamos el anti-flip de xschem a la librería: el texto nunca queda
+    // cabeza abajo, y los factores de anchor corresponden a la combinación
+    // de h_center/v_center con rotation/mirror.
+    let layout = xschem_viewer::resolve_text_layout(rotation, mirror, h_center, v_center);
 
-    // Alineación horizontal (text-anchor en SVG)
-    let anchor_factor_x = if h_center { 0.5 } else if h_mirror { 1.0 } else { 0.0 };
-    // Alineación vertical (alignment-baseline en SVG)
-    // before-edge = top (factor 0), after-edge = bottom (factor 1), middle = 0.5
-    let anchor_factor_y = if v_center { 0.5 } else if v_mirror { 1.0 } else { 0.0 };
-
-    // Ángulo visual en pantalla (Y-down, positivo = horario).
-    // Se elige el equivalente que deja el texto legible:
-    //   rotation=0 → horizontal normal           → 0
-    //   rotation=1 → vertical, base a la derecha → -π/2 (lee hacia arriba)
-    //   rotation=2 → horizontal con anchors flip → 0 (scale(-1)·scale(1,-1) = identidad visual)
-    //   rotation=3 → vertical, base a la izquierda → +π/2 (lee hacia abajo)
-    let angle = match rotation.rem_euclid(4) {
-        0 | 2 => 0.0,
-        1     => -std::f32::consts::FRAC_PI_2,
-        3     =>  std::f32::consts::FRAC_PI_2,
-        _     => 0.0,
+    let anchor_factor_x = match layout.h_align {
+        xschem_viewer::HAlign::Start  => 0.0,
+        xschem_viewer::HAlign::Middle => 0.5,
+        xschem_viewer::HAlign::End    => 1.0,
     };
+    let anchor_factor_y = match layout.baseline {
+        xschem_viewer::VBaseline::Top    => 0.0,
+        xschem_viewer::VBaseline::Middle => 0.5,
+        xschem_viewer::VBaseline::Bottom => 1.0,
+    };
+
+    let angle = layout.visual_angle_deg.to_radians();
     let (cos_a, sin_a) = (angle.cos(), angle.sin());
 
     let lines: Vec<&str> = content.lines().collect();
     let n = lines.len();
-    // Ancla principal en pantalla (punto (x,y) del schematic)
     let anchor_screen = world_to_screen(vp, rect, x, y);
 
     for (i, line) in lines.iter().enumerate() {
-        // Orden de líneas: si v_mirror, invertir
-        let line_index = if v_mirror { n - 1 - i } else { i } as f32;
+        let line_index = match layout.line_direction {
+            xschem_viewer::LineDirection::Forward => i,
+            xschem_viewer::LineDirection::Reverse => n - 1 - i,
+        } as f32;
         let line_dy = line_index * font_size;
 
         let galley = painter.layout_no_wrap(line.to_string(), font.clone(), color);
@@ -274,9 +267,9 @@ fn paint_ghosts(
         let show = comp.position_changed || matches!(comp.kind, riku::core::models::ChangeKind::Removed);
         if !show { continue; }
 
-        let lookup = comp.name.split(" → ").next().unwrap_or(&comp.name);
-        for elem in &scene_a.elements {
-            if elem.component_id() != Some(lookup) { continue; }
+        // Para renombrados, el nombre del lado A está antes del "→".
+        let lookup = comp.name.split_once(" → ").map(|(a, _)| a).unwrap_or(&comp.name);
+        for elem in scene_a.elements_of(lookup) {
             paint_element_tinted(painter, vp, rect, elem, ghost);
         }
     }
@@ -421,60 +414,10 @@ fn paint_diff_annotations(
 }
 
 fn elements_bbox_for(scene: &ResolvedScene, name: &str) -> Option<(f64, f64, f64, f64)> {
-    use xschem_viewer::DrawElement::*;
-
-    // Para renombrados: "R1 → R2" — buscar el nombre del lado B (después del →)
-    let lookup = if name.contains(" → ") {
-        name.split(" → ").nth(1).unwrap_or(name)
-    } else {
-        name
-    };
-
-    let mut min_x = f64::MAX;
-    let mut min_y = f64::MAX;
-    let mut max_x = f64::MIN;
-    let mut max_y = f64::MIN;
-    let mut found = false;
-
-    for elem in &scene.elements {
-        if elem.component_id() != Some(lookup) { continue; }
-        found = true;
-        match elem {
-            Line { x1, y1, x2, y2, .. } => {
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, *x1, *y1);
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, *x2, *y2);
-            }
-            Rect { x, y, w, h, .. } => {
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, *x, *y);
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, x + w, y + h);
-            }
-            Circle { cx, cy, r, .. } => {
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, cx - r, cy - r);
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, cx + r, cy + r);
-            }
-            Arc { cx, cy, r, .. } => {
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, cx - r, cy - r);
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, cx + r, cy + r);
-            }
-            Polygon { points, .. } => {
-                for (x, y) in points {
-                    expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, *x, *y);
-                }
-            }
-            Text { x, y, .. } | MissingSymbol { x, y, .. } => {
-                expand(&mut min_x, &mut min_y, &mut max_x, &mut max_y, *x, *y);
-            }
-        }
-    }
-
-    if found { Some((min_x, min_y, max_x, max_y)) } else { None }
-}
-
-fn expand(min_x: &mut f64, min_y: &mut f64, max_x: &mut f64, max_y: &mut f64, x: f64, y: f64) {
-    *min_x = min_x.min(x);
-    *min_y = min_y.min(y);
-    *max_x = max_x.max(x);
-    *max_y = max_y.max(y);
+    // Para renombrados ("R1 → R2") buscamos el nombre posterior.
+    let lookup = name.split_once(" → ").map(|(_, b)| b).unwrap_or(name);
+    let bbox = scene.component_bbox(lookup)?;
+    Some((bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y))
 }
 
 fn annotation_colors(kind: &ChangeKind, cosmetic: bool, position_changed: bool) -> (Color32, Color32) {
