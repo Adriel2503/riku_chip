@@ -3804,7 +3804,7 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 [[package]]
 name = "xschem-viewer"
 version = "0.1.0"
-source = "git+https://github.com/carloscl03/xschem-viewer-rust#904eb26aed6c695fab2eea9e69523057b2f2e472"
+source = "git+https://github.com/carloscl03/xschem-viewer-rust#c09cfe0af5fa20fb525f6da32593b79f94f7eee0"
 dependencies = [
  "dirs",
  "pest",
@@ -3812,6 +3812,7 @@ dependencies = [
  "serde",
  "serde_json",
  "svg",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
