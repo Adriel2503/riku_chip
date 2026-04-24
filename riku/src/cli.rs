@@ -55,10 +55,8 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         repo: PathBuf,
     },
-    /// Renderiza un archivo .sch a SVG.
-    Render { file: PathBuf },
-    /// Abre la GUI de escritorio.
-    Gui { file: Option<PathBuf> },
+    /// Abre un archivo .sch en el visor de escritorio.
+    Open { file: Option<PathBuf> },
     /// Abre el shell interactivo de Riku.
     Shell {
         #[arg(short, long, default_value = ".")]
@@ -80,8 +78,7 @@ pub fn run() -> ExitCode {
             run_log(repo, file_path.as_deref(), limit, semantic)
         }
         Some(Commands::Doctor { repo }) => run_doctor(repo),
-        Some(Commands::Render { file }) => run_render(file),
-        Some(Commands::Gui { file }) => run_gui(file),
+        Some(Commands::Open { file }) => run_gui(file),
         Some(Commands::Shell { repo }) => run_shell(repo),
     };
 
@@ -226,18 +223,6 @@ fn present_visual(
     ];
 
     run_gui_with_args(extra_args)
-}
-
-// ─── Render ──────────────────────────────────────────────────────────────────
-
-fn run_render(file: PathBuf) -> Result<(), String> {
-    let content = std::fs::read(&file).map_err(|e| e.to_string())?;
-    let driver = XschemDriver::new();
-    let svg_path = driver
-        .render(&content, &file.to_string_lossy())
-        .ok_or_else(|| "No se pudo renderizar el archivo.".to_string())?;
-    println!("SVG: {}", svg_path.display());
-    open_file(&svg_path)
 }
 
 // ─── Log ─────────────────────────────────────────────────────────────────────
@@ -641,9 +626,8 @@ fn print_shell_help() {
     println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
     println!("    diff ... --format visual                      diff visual en HTML");
     println!();
-    println!("  Render:");
-    println!("    render <archivo.sch>                          renderizar a SVG");
-    println!("    gui [archivo.gds]                             abrir visor de escritorio");
+    println!("  Visor:");
+    println!("    open [archivo.sch]                            abrir visor de escritorio");
     println!();
     println!("  Entorno:");
     println!("    doctor                                        verificar PDK y repo");
@@ -676,15 +660,7 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                 Some(Commands::Doctor { repo: r }) => {
                     run_doctor(if r == PathBuf::from(".") { repo_path } else { r })
                 }
-                Some(Commands::Render { file }) => {
-                    let effective = if file.components().count() == 1 {
-                        ctx.cwd.join(&file)
-                    } else {
-                        file
-                    };
-                    run_render(effective)
-                }
-                Some(Commands::Gui { file }) => {
+                Some(Commands::Open { file }) => {
                     let effective = file.map(|f| {
                         if f.components().count() == 1 { ctx.cwd.join(&f) } else { f }
                     });
@@ -701,30 +677,3 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
     }
 }
 
-// ─── System open ─────────────────────────────────────────────────────────────
-
-fn open_file(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path.to_string_lossy()])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open").arg(path).spawn().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-        if Command::new("xdg-open").env("DISPLAY", &display).arg(path).spawn().is_err() {
-            eprintln!("[!] No se pudo abrir automáticamente. Abrelo manualmente: {}", path.display());
-        }
-        Ok(())
-    }
-}
