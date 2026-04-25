@@ -13,6 +13,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod commands;
+mod format;
 mod shell;
 
 // ─── Tipos del parser ────────────────────────────────────────────────────────
@@ -65,6 +66,21 @@ pub(crate) enum Commands {
         /// Lista tambien archivos sin driver (no reconocidos por Riku).
         #[arg(long)]
         include_unknown: bool,
+        /// Salida en JSON estable (schema riku-status/v1).
+        #[arg(long)]
+        json: bool,
+        /// JSON compacto (una linea); por defecto pretty-printed.
+        #[arg(long)]
+        compact: bool,
+        /// Eleva el detalle: agrega entrada por componente/net cambiada.
+        #[arg(long, conflicts_with = "full")]
+        detail: bool,
+        /// Imprime el reporte completo del driver por archivo.
+        #[arg(long)]
+        full: bool,
+        /// Filtra por glob (puede repetirse). Ej: --paths 'amp_*.sch'.
+        #[arg(long = "paths", value_name = "PAT")]
+        paths: Vec<String>,
     },
     /// Abre un archivo .sch en el visor de escritorio.
     Open { file: Option<PathBuf> },
@@ -75,6 +91,36 @@ pub(crate) enum Commands {
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
 
+    // `Status` tiene exit codes propios (0 limpio, 1 con cambios, 2 error).
+    // El resto de comandos sigue la convención clásica (0 ok, 1 error).
+    if let Some(Commands::Status {
+        repo,
+        include_unknown,
+        json,
+        compact,
+        detail,
+        full,
+        paths,
+    }) = cli.command
+    {
+        return match commands::run_status(commands::StatusArgs {
+            repo,
+            include_unknown,
+            json,
+            compact,
+            detail,
+            full,
+            paths,
+        }) {
+            Ok(commands::StatusOutcome::Clean) => ExitCode::SUCCESS,
+            Ok(commands::StatusOutcome::Dirty) => ExitCode::from(1),
+            Err(err) => {
+                eprintln!("{err}");
+                ExitCode::from(2)
+            }
+        };
+    }
+
     let result = match cli.command {
         None => shell::run_shell(),
         Some(Commands::Diff { commit_a, commit_b, file_path, repo, format }) => {
@@ -84,9 +130,7 @@ pub fn run() -> ExitCode {
             commands::run_log(repo, file_path.as_deref(), limit, semantic)
         }
         Some(Commands::Doctor { repo }) => commands::run_doctor(repo),
-        Some(Commands::Status { repo, include_unknown }) => {
-            commands::run_status(repo, include_unknown)
-        }
+        Some(Commands::Status { .. }) => unreachable!(),
         Some(Commands::Open { file }) => commands::run_gui(file),
     };
 

@@ -16,7 +16,7 @@ use crate::core::git_service::{
 };
 use crate::core::ports::{GitRepository, RepoRoot};
 use crate::core::registry::get_driver_for;
-use crate::core::summary::{FileSummary, SummaryCategory};
+use crate::core::summary::{DetailLevel, FileSummary, SummaryCategory};
 
 // ─── Errores ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,27 @@ pub enum StatusError {
 }
 
 // ─── Modelo de salida ────────────────────────────────────────────────────────
+
+/// Identificador del schema JSON de `riku status`. Versionado a propósito:
+/// cambios incompatibles bumpan el sufijo (`v1` → `v2`); cambios compatibles
+/// (campos nuevos opcionales) no.
+pub const STATUS_SCHEMA: &str = "riku-status/v1";
+
+/// Wrapper público para serialización con `schema` siempre presente.
+///
+/// Usar `EnvelopedStatusReport::from(report)` antes de pasar a `serde_json`.
+#[derive(Clone, Debug, Serialize)]
+pub struct EnvelopedStatusReport<'a> {
+    pub schema: &'static str,
+    #[serde(flatten)]
+    pub inner: &'a StatusReport,
+}
+
+impl<'a> From<&'a StatusReport> for EnvelopedStatusReport<'a> {
+    fn from(inner: &'a StatusReport) -> Self {
+        Self { schema: STATUS_SCHEMA, inner }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StatusReport {
@@ -51,36 +72,91 @@ impl StatusReport {
     }
 }
 
-// ─── Entry points ────────────────────────────────────────────────────────────
+// ─── Opciones ────────────────────────────────────────────────────────────────
 
-/// Helper que abre el repo y delega en `analyze_with_repo`.
-pub fn analyze(repo_path: &Path) -> Result<StatusReport, StatusError> {
-    let svc = GitService::open(repo_path)?;
-    let workdir = svc.root().map(|p| p.to_path_buf());
-    analyze_with_repo(&svc, workdir.as_deref())
+/// Configuración para `analyze_with_options`.
+///
+/// `paths` admite globs simples estilo gitignore (`amp_*.sch`, `**/*.sch`).
+/// Vacío significa "no filtrar".
+#[derive(Clone, Debug, Default)]
+pub struct StatusOptions {
+    pub level: DetailLevel,
+    pub paths: Vec<String>,
 }
 
-/// Versión inyectable: recibe un `GitRepository` y la raíz del working tree.
-///
-/// `workdir` es opcional: si es `None`, no se leen archivos de disco — solo
-/// se reportan paths sin contenido (útil para tests sin filesystem).
+// ─── Entry points ────────────────────────────────────────────────────────────
+
+/// Helper que abre el repo y delega en `analyze_with_options` con defaults.
+pub fn analyze(repo_path: &Path) -> Result<StatusReport, StatusError> {
+    analyze_with_options_path(repo_path, &StatusOptions::default())
+}
+
+/// Helper que abre el repo desde path y aplica `StatusOptions`.
+pub fn analyze_with_options_path(
+    repo_path: &Path,
+    opts: &StatusOptions,
+) -> Result<StatusReport, StatusError> {
+    let svc = GitService::open(repo_path)?;
+    let workdir = svc.root().map(|p| p.to_path_buf());
+    analyze_with_options(&svc, workdir.as_deref(), opts)
+}
+
+/// Versión inyectable sin opciones (compatibilidad con Fase 1 / tests).
 pub fn analyze_with_repo<R: GitRepository + ?Sized>(
     repo: &R,
     workdir: Option<&Path>,
 ) -> Result<StatusReport, StatusError> {
+    analyze_with_options(repo, workdir, &StatusOptions::default())
+}
+
+/// Versión inyectable con opciones.
+pub fn analyze_with_options<R: GitRepository + ?Sized>(
+    repo: &R,
+    workdir: Option<&Path>,
+    opts: &StatusOptions,
+) -> Result<StatusReport, StatusError> {
     let branch = repo.current_branch()?;
     let changes = repo.working_tree_changes()?;
+
+    let matcher = PathMatcher::new(&opts.paths);
 
     let mut files = Vec::new();
     let mut warnings = Vec::new();
 
     for change in changes {
-        let summary = summarize_change(repo, workdir, &change, &mut warnings);
+        if !matcher.matches(&change.path) {
+            continue;
+        }
+        let summary = summarize_change(repo, workdir, &change, opts.level, &mut warnings);
         files.push(summary);
     }
 
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(StatusReport { branch, files, warnings })
+}
+
+// ─── Filtro por path ─────────────────────────────────────────────────────────
+
+/// Glob mínimo: soporta `*`, `?` y `**`. Si la lista está vacía, todo coincide.
+struct PathMatcher {
+    patterns: Vec<glob::Pattern>,
+}
+
+impl PathMatcher {
+    fn new(raw: &[String]) -> Self {
+        let patterns = raw
+            .iter()
+            .filter_map(|p| glob::Pattern::new(p).ok())
+            .collect();
+        Self { patterns }
+    }
+
+    fn matches(&self, path: &str) -> bool {
+        if self.patterns.is_empty() {
+            return true;
+        }
+        self.patterns.iter().any(|p| p.matches(path))
+    }
 }
 
 // ─── Resumen por archivo ─────────────────────────────────────────────────────
@@ -89,6 +165,7 @@ fn summarize_change<R: GitRepository + ?Sized>(
     repo: &R,
     workdir: Option<&Path>,
     change: &WorkingChange,
+    level: DetailLevel,
     warnings: &mut Vec<String>,
 ) -> FileSummary {
     let driver = match get_driver_for(&change.path) {
@@ -126,7 +203,7 @@ fn summarize_change<R: GitRepository + ?Sized>(
     };
 
     let report = driver.diff(&content_before, &content_after, &change.path);
-    FileSummary::from_report(&report, &change.path)
+    FileSummary::from_report_with(&report, &change.path, level)
 }
 
 fn read_workdir(workdir: Option<&Path>, rel_path: &str) -> Result<Vec<u8>, String> {
@@ -210,6 +287,26 @@ mod tests {
     }
 
     #[test]
+    fn paths_filtra_por_glob() {
+        let repo = MockRepo {
+            changes: vec![
+                WorkingChange { path: "amp_ota.sch".into(), status: ChangeStatus::Modified, old_path: None },
+                WorkingChange { path: "filtro.sch".into(), status: ChangeStatus::Modified, old_path: None },
+                WorkingChange { path: "Makefile".into(), status: ChangeStatus::Modified, old_path: None },
+            ],
+            head_blobs: Default::default(),
+            branch: None,
+        };
+        let opts = StatusOptions {
+            level: DetailLevel::Resumen,
+            paths: vec!["amp_*.sch".to_string()],
+        };
+        let report = analyze_with_options(&repo, None, &opts).unwrap();
+        assert_eq!(report.files.len(), 1);
+        assert_eq!(report.files[0].path, "amp_ota.sch");
+    }
+
+    #[test]
     fn rama_se_propaga_al_reporte() {
         let repo = MockRepo {
             changes: vec![],
@@ -225,5 +322,59 @@ mod tests {
         };
         let report = analyze_with_repo(&repo, None).unwrap();
         assert_eq!(report.branch.as_ref().map(|b| b.name.as_str()), Some("feature-amp"));
+    }
+
+    // ── Tests del contrato JSON (schema riku-status/v1) ──────────────────
+
+    fn fixture_report() -> StatusReport {
+        StatusReport {
+            branch: Some(BranchInfo {
+                name: "feature-amp".into(),
+                head_oid: "abcdef0123456789abcdef0123456789abcdef01".into(),
+                head_short: "abcdef0".into(),
+                upstream: Some("origin/feature-amp".into()),
+                ahead: 3,
+                behind: 0,
+            }),
+            files: vec![FileSummary::unknown("Makefile")],
+            warnings: vec![],
+        }
+    }
+
+    #[test]
+    fn json_envelope_lleva_schema_versionado() {
+        let report = fixture_report();
+        let env = EnvelopedStatusReport::from(&report);
+        let s = serde_json::to_string(&env).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert_eq!(v["schema"], "riku-status/v1");
+    }
+
+    #[test]
+    fn json_contiene_claves_principales() {
+        let report = fixture_report();
+        let env = EnvelopedStatusReport::from(&report);
+        let v: serde_json::Value = serde_json::to_value(&env).unwrap();
+        assert!(v.get("schema").is_some());
+        assert!(v.get("branch").is_some());
+        assert!(v.get("files").is_some());
+        assert!(v.get("warnings").is_some());
+        let branch = &v["branch"];
+        assert_eq!(branch["name"], "feature-amp");
+        assert_eq!(branch["head_short"], "abcdef0");
+        assert_eq!(branch["upstream"], "origin/feature-amp");
+        assert_eq!(branch["ahead"], 3);
+    }
+
+    #[test]
+    fn json_omite_campos_vacios_para_estabilidad() {
+        // Un FileSummary sin details/full_report/errors no debe inflar la salida
+        // con campos null/vacíos — `skip_serializing_if` los oculta.
+        let report = fixture_report();
+        let v = serde_json::to_value(EnvelopedStatusReport::from(&report)).unwrap();
+        let file = &v["files"][0];
+        assert!(file.get("details").is_none(), "details vacío no debe aparecer");
+        assert!(file.get("full_report").is_none(), "full_report ausente no debe aparecer");
+        assert!(file.get("errors").is_none(), "errors vacío no debe aparecer");
     }
 }
