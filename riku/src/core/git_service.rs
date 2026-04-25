@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use git2::{DiffOptions, Oid, Repository};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::core::ports::RepoRoot;
@@ -21,7 +22,8 @@ pub struct ChangedFile {
     pub old_path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ChangeStatus {
     Added,
     Removed,
@@ -29,14 +31,14 @@ pub enum ChangeStatus {
     Renamed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkingChange {
     pub path: String,
     pub status: ChangeStatus,
     pub old_path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BranchInfo {
     pub name: String,
     pub head_oid: String,
