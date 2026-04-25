@@ -8,7 +8,6 @@ pub mod log;
 pub mod models;
 pub mod path_matcher;
 pub mod ports;
-pub mod registry;
 pub mod status;
 pub mod styles;
 pub mod summary;

@@ -14,7 +14,7 @@ use crate::adapters::xschem_driver::XschemDriver;
 use crate::core::diff_view::DiffView;
 use crate::core::log;
 use crate::core::models::ChangeKind;
-use crate::core::registry::get_drivers;
+use crate::adapters::registry::get_drivers;
 use crate::core::status::{self, StatusOptions};
 use crate::core::summary::DetailLevel;
 
