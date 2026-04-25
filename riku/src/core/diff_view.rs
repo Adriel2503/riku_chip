@@ -6,7 +6,7 @@ use crate::core::driver::RikuDriver;
 use crate::core::git_service::{GitError, GitService};
 use crate::core::models::{ChangeKind, ComponentDiff, DiffReport, Schematic};
 use crate::core::ports::GitRepository;
-use crate::core::styles::{AnnotationStyle, annotation_style};
+use crate::core::rendering::styles::{AnnotationStyle, annotation_style};
 
 // ─── Error ───────────────────────────────────────────────────────────────────
 

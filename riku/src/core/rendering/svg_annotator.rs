@@ -1,5 +1,5 @@
 use crate::core::models::{ChangeKind, ComponentDiff, DiffReport, Schematic};
-use crate::core::styles::annotation_style;
+use crate::core::rendering::styles::annotation_style;
 
 // Half-size of the bounding box drawn around each changed component, in schematic units.
 const BBOX_HALF: f64 = 20.0;
@@ -91,7 +91,7 @@ pub fn annotate(
 mod tests {
     use super::annotate;
     use crate::core::models::{ChangeKind, Component, ComponentDiff, DiffReport, Schematic, Wire};
-    use crate::core::styles::annotation_style;
+    use crate::core::rendering::styles::annotation_style;
     use std::collections::{BTreeMap, BTreeSet};
 
     #[test]
