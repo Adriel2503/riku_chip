@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::core::ports::RepoRoot;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommitInfo {
     pub oid: String,
     pub short_id: String,
