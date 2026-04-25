@@ -1,0 +1,392 @@
+//! Orquestación de `riku log`.
+//!
+//! Recorre el historial Git y, por cada commit, computa un resumen semántico
+//! (igual que `status` para el working tree, pero entre `parent..commit`).
+//! Como `status`, no formatea — entrega `LogReport` y la capa CLI elige texto
+//! o JSON.
+
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::core::driver::DriverDiffReport;
+use crate::core::git_service::{
+    ChangeStatus, CommitInfo, CommitWithParents, GitError, GitService, LogQuery,
+};
+use crate::core::ports::GitRepository;
+use crate::core::registry::get_driver_for;
+use crate::core::summary::{DetailLevel, FileSummary, SummaryCategory};
+
+// ─── Errores ─────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Error)]
+pub enum LogError {
+    #[error(transparent)]
+    Git(#[from] GitError),
+}
+
+// ─── Schema ──────────────────────────────────────────────────────────────────
+
+pub const LOG_SCHEMA: &str = "riku-log/v1";
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EnvelopedLogReport<'a> {
+    pub schema: &'static str,
+    #[serde(flatten)]
+    pub inner: &'a LogReport,
+}
+
+impl<'a> From<&'a LogReport> for EnvelopedLogReport<'a> {
+    fn from(inner: &'a LogReport) -> Self {
+        Self { schema: LOG_SCHEMA, inner }
+    }
+}
+
+// ─── Modelo de salida ────────────────────────────────────────────────────────
+
+/// Un commit anotado con su resumen semántico por archivo.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogCommit {
+    #[serde(flatten)]
+    pub info: CommitInfo,
+    /// OIDs de los padres (1 normal, 0 root, 2+ merge).
+    pub parents: Vec<String>,
+    /// Refs que apuntan exactamente a este commit (rama, tag, HEAD).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub refs: Vec<String>,
+    /// `true` si tiene más de un padre. Implica `files` vacío en v1.
+    pub is_merge: bool,
+    /// Resumen por archivo. Vacío en commits root o merge en v1.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub files: Vec<FileSummary>,
+}
+
+impl LogCommit {
+    pub fn has_semantic_changes(&self) -> bool {
+        self.files
+            .iter()
+            .any(|f| matches!(f.category, SummaryCategory::Semantic))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogReport {
+    pub commits: Vec<LogCommit>,
+    pub warnings: Vec<String>,
+}
+
+// ─── Opciones ────────────────────────────────────────────────────────────────
+
+/// Configuración para `walk_with_summary` y variantes.
+#[derive(Clone, Debug, Default)]
+pub struct LogOptions {
+    pub level: DetailLevel,
+    /// Filtra commits que tocan al menos uno de estos paths exactos.
+    pub paths: Vec<String>,
+    pub limit: Option<usize>,
+    /// Ref/oid de inicio. `None` = HEAD.
+    pub start: Option<String>,
+}
+
+// ─── Entry points ────────────────────────────────────────────────────────────
+
+pub fn analyze(repo_path: &Path) -> Result<LogReport, LogError> {
+    analyze_with_options_path(repo_path, &LogOptions::default())
+}
+
+pub fn analyze_with_options_path(
+    repo_path: &Path,
+    opts: &LogOptions,
+) -> Result<LogReport, LogError> {
+    let svc = GitService::open(repo_path)?;
+    walk_with_summary(&svc, opts)
+}
+
+pub fn walk_with_summary<R: GitRepository + ?Sized>(
+    repo: &R,
+    opts: &LogOptions,
+) -> Result<LogReport, LogError> {
+    // Para mantener semántica de Git nativo cuando hay `paths`, recorremos
+    // todo y filtramos por commit. Si en el futuro hace falta optimizar,
+    // pasar el primer path al `LogQuery::file_path`.
+    let query = LogQuery {
+        file_path: None,
+        limit: opts.limit,
+        start: opts.start.as_deref(),
+    };
+    let raw = repo.get_commits_with_options(&query)?;
+    let refs_map = repo.refs_by_oid().unwrap_or_default();
+
+    let mut warnings = Vec::new();
+    let mut commits = Vec::with_capacity(raw.len());
+    for c in raw {
+        let log_commit = build_log_commit(repo, c, &refs_map, opts, &mut warnings);
+        // Si hay filtro de paths y este commit no tocó ninguno, lo omitimos.
+        if !opts.paths.is_empty() && log_commit.files.is_empty() && !log_commit.is_merge {
+            continue;
+        }
+        commits.push(log_commit);
+    }
+
+    Ok(LogReport { commits, warnings })
+}
+
+// ─── Construcción por commit ─────────────────────────────────────────────────
+
+fn build_log_commit<R: GitRepository + ?Sized>(
+    repo: &R,
+    raw: CommitWithParents,
+    refs_map: &std::collections::HashMap<String, Vec<String>>,
+    opts: &LogOptions,
+    warnings: &mut Vec<String>,
+) -> LogCommit {
+    let oid = raw.info.oid.clone();
+    let refs = refs_map.get(&oid).cloned().unwrap_or_default();
+    let is_merge = raw.parents.len() > 1;
+
+    let files = if is_merge || raw.parents.is_empty() {
+        // Root commit y merges: en v1 no se hace diff por archivo.
+        Vec::new()
+    } else {
+        let parent = &raw.parents[0];
+        diff_against_parent(repo, parent, &oid, opts, warnings)
+    };
+
+    LogCommit { info: raw.info, parents: raw.parents, refs, is_merge, files }
+}
+
+fn diff_against_parent<R: GitRepository + ?Sized>(
+    repo: &R,
+    parent: &str,
+    commit: &str,
+    opts: &LogOptions,
+    warnings: &mut Vec<String>,
+) -> Vec<FileSummary> {
+    let changed = match repo.get_changed_files(parent, commit) {
+        Ok(list) => list,
+        Err(e) => {
+            warnings.push(format!("commit {commit}: {e}"));
+            return Vec::new();
+        }
+    };
+
+    let matcher = path_matcher::PathMatcher::new(&opts.paths);
+
+    let mut files = Vec::new();
+    for cf in changed {
+        if !matcher.matches(&cf.path) {
+            continue;
+        }
+        let driver = match get_driver_for(&cf.path) {
+            Some(d) => d,
+            None => continue, // formatos sin driver no se listan en log
+        };
+
+        let content_before = if cf.status == ChangeStatus::Added {
+            Vec::new()
+        } else {
+            match repo.get_blob(parent, &cf.path) {
+                Ok(b) => b,
+                Err(GitError::BlobNotFound { .. }) => Vec::new(),
+                Err(e) => {
+                    warnings.push(format!("{} en {parent}: {e}", cf.path));
+                    Vec::new()
+                }
+            }
+        };
+        let content_after = if cf.status == ChangeStatus::Removed {
+            Vec::new()
+        } else {
+            match repo.get_blob(commit, &cf.path) {
+                Ok(b) => b,
+                Err(GitError::BlobNotFound { .. }) => Vec::new(),
+                Err(e) => {
+                    warnings.push(format!("{} en {commit}: {e}", cf.path));
+                    Vec::new()
+                }
+            }
+        };
+
+        let report: DriverDiffReport = driver.diff(&content_before, &content_after, &cf.path);
+        let summary = FileSummary::from_report_with(&report, &cf.path, opts.level);
+        // Saltamos archivos sin cambio semántico ni cosmético detectado, para
+        // no inflar el log con ruido de driver.
+        if matches!(summary.category, SummaryCategory::Unchanged) {
+            continue;
+        }
+        files.push(summary);
+    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    files
+}
+
+// Reutiliza el matcher de `status` sin acoplar módulos. Lo redeclaro local
+// para mantener `core::status` como autocontenido.
+mod path_matcher {
+    pub struct PathMatcher {
+        patterns: Vec<glob::Pattern>,
+    }
+    impl PathMatcher {
+        pub fn new(raw: &[String]) -> Self {
+            let patterns = raw
+                .iter()
+                .filter_map(|p| glob::Pattern::new(p).ok())
+                .collect();
+            Self { patterns }
+        }
+        pub fn matches(&self, path: &str) -> bool {
+            if self.patterns.is_empty() {
+                return true;
+            }
+            self.patterns.iter().any(|p| p.matches(path))
+        }
+    }
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::driver::DriverDiffReport;
+    use crate::core::git_service::{BranchInfo, ChangedFile, WorkingChange};
+    use crate::core::models::FileFormat;
+
+    struct MockRepo {
+        commits: Vec<CommitWithParents>,
+        blobs: std::collections::HashMap<(String, String), Vec<u8>>,
+        changed: std::collections::HashMap<(String, String), Vec<ChangedFile>>,
+        refs: std::collections::HashMap<String, Vec<String>>,
+    }
+
+    impl GitRepository for MockRepo {
+        fn get_blob(&self, commit_ish: &str, file_path: &str) -> Result<Vec<u8>, GitError> {
+            self.blobs
+                .get(&(commit_ish.to_string(), file_path.to_string()))
+                .cloned()
+                .ok_or_else(|| GitError::BlobNotFound {
+                    commit: commit_ish.to_string(),
+                    path: file_path.to_string(),
+                })
+        }
+        fn get_commits(&self, _file_path: Option<&str>) -> Result<Vec<CommitInfo>, GitError> {
+            Ok(self.commits.iter().map(|c| c.info.clone()).collect())
+        }
+        fn get_changed_files(
+            &self,
+            a: &str,
+            b: &str,
+        ) -> Result<Vec<ChangedFile>, GitError> {
+            Ok(self
+                .changed
+                .get(&(a.to_string(), b.to_string()))
+                .cloned()
+                .unwrap_or_default())
+        }
+        fn working_tree_changes(&self) -> Result<Vec<WorkingChange>, GitError> {
+            Ok(Vec::new())
+        }
+        fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
+            Ok(None)
+        }
+        fn get_commits_with_options(
+            &self,
+            _query: &LogQuery<'_>,
+        ) -> Result<Vec<CommitWithParents>, GitError> {
+            Ok(self.commits.clone())
+        }
+        fn refs_by_oid(
+            &self,
+        ) -> Result<std::collections::HashMap<String, Vec<String>>, GitError> {
+            Ok(self.refs.clone())
+        }
+    }
+
+    fn ci(oid: &str, parents: &[&str]) -> CommitWithParents {
+        CommitWithParents {
+            info: CommitInfo {
+                oid: oid.to_string(),
+                short_id: oid.chars().take(7).collect(),
+                message: format!("commit {oid}"),
+                author: "tester".to_string(),
+                timestamp: 0,
+            },
+            parents: parents.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn merge_no_lleva_files_pero_se_marca() {
+        let repo = MockRepo {
+            commits: vec![ci("abc", &["p1", "p2"])],
+            blobs: Default::default(),
+            changed: Default::default(),
+            refs: Default::default(),
+        };
+        let report = walk_with_summary(&repo, &LogOptions::default()).unwrap();
+        assert_eq!(report.commits.len(), 1);
+        assert!(report.commits[0].is_merge);
+        assert!(report.commits[0].files.is_empty());
+    }
+
+    #[test]
+    fn root_commit_no_lleva_files() {
+        let repo = MockRepo {
+            commits: vec![ci("root", &[])],
+            blobs: Default::default(),
+            changed: Default::default(),
+            refs: Default::default(),
+        };
+        let report = walk_with_summary(&repo, &LogOptions::default()).unwrap();
+        assert!(!report.commits[0].is_merge);
+        assert!(report.commits[0].files.is_empty());
+    }
+
+    #[test]
+    fn refs_se_anotan_por_oid() {
+        let mut refs = std::collections::HashMap::new();
+        refs.insert("abc1234".to_string(), vec!["main".to_string(), "HEAD".to_string()]);
+        let repo = MockRepo {
+            commits: vec![ci("abc1234", &["parent"])],
+            blobs: Default::default(),
+            changed: Default::default(),
+            refs,
+        };
+        let report = walk_with_summary(&repo, &LogOptions::default()).unwrap();
+        assert!(report.commits[0].refs.contains(&"main".to_string()));
+        assert!(report.commits[0].refs.contains(&"HEAD".to_string()));
+    }
+
+    #[test]
+    fn paths_filtra_commits_que_no_tocan_match() {
+        // Mock con un commit sin file changed → con filtro paths se omite.
+        let repo = MockRepo {
+            commits: vec![ci("abc", &["parent"])],
+            blobs: Default::default(),
+            changed: Default::default(), // sin entradas → 0 cambios
+            refs: Default::default(),
+        };
+        let opts = LogOptions {
+            paths: vec!["*.sch".to_string()],
+            ..Default::default()
+        };
+        let report = walk_with_summary(&repo, &opts).unwrap();
+        assert!(report.commits.is_empty());
+    }
+
+    #[test]
+    fn json_envelope_lleva_schema() {
+        let report = LogReport { commits: vec![], warnings: vec![] };
+        let env = EnvelopedLogReport::from(&report);
+        let v: serde_json::Value = serde_json::to_value(&env).unwrap();
+        assert_eq!(v["schema"], "riku-log/v1");
+        assert!(v.get("commits").is_some());
+    }
+
+    // Defensa contra advertencias por warning de tipo no usado en algunos
+    // builds: el `DriverDiffReport` y `FileFormat` están importados para
+    // futuras extensiones (si se añaden tests con drivers reales).
+    #[allow(dead_code)]
+    fn _unused_imports_anchor(_a: DriverDiffReport, _b: FileFormat) {}
+}

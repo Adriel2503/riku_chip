@@ -4,6 +4,7 @@ pub mod driver;
 pub mod error;
 pub mod format;
 pub mod git_service;
+pub mod log;
 pub mod models;
 pub mod ports;
 pub mod registry;

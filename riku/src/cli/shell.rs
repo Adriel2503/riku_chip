@@ -192,7 +192,8 @@ fn print_shell_help() {
     println!("  Git:");
     println!("    status [--detail|--full] [--json [--compact]] [--paths PAT]");
     println!("                                                    cambios semánticos en working tree");
-    println!("    log [archivo.sch] [--semantic] [--limit <n>]  historial de commits");
+    println!("    log [archivo.sch] [--detail|--full] [--json [--compact]] [--paths PAT] [--branch REF]");
+    println!("                                                    historial con resumen semántico por commit");
     println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
     println!("    diff ... --format visual                      diff visual en HTML");
     println!();
@@ -222,10 +223,31 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                     let effective_file = ctx.resolve_file(&file_path);
                     commands::run_diff(effective_repo, &commit_a, &commit_b, &effective_file, format)
                 }
-                Some(Commands::Log { file_path, repo: r, limit, semantic }) => {
+                Some(Commands::Log {
+                    file_path,
+                    repo: r,
+                    limit,
+                    semantic: _,
+                    json,
+                    compact,
+                    detail,
+                    full,
+                    paths,
+                    branch,
+                }) => {
                     let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
-                    let effective_file = file_path.as_deref().map(|f| ctx.resolve_file(f));
-                    commands::run_log(effective_repo, effective_file.as_deref(), limit, semantic)
+                    let effective_file = file_path.map(|f| ctx.resolve_file(&f));
+                    commands::run_log(commands::LogArgs {
+                        repo: effective_repo,
+                        file_path: effective_file,
+                        limit,
+                        json,
+                        compact,
+                        detail,
+                        full,
+                        paths,
+                        branch,
+                    })
                 }
                 Some(Commands::Doctor { repo: r }) => {
                     commands::run_doctor(if r == PathBuf::from(".") { repo_path } else { r })

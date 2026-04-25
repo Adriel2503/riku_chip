@@ -44,15 +44,36 @@ pub(crate) enum Commands {
         #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
     },
-    /// Lista commits del branch actual, opcionalmente filtrados por archivo.
+    /// Lista commits con resumen semantico por archivo.
     Log {
+        /// Path posicional opcional. Equivalente a `--paths <PAT>`.
         file_path: Option<String>,
         #[arg(short, long, default_value = ".")]
         repo: PathBuf,
         #[arg(short = 'n', long, default_value_t = 20)]
         limit: usize,
-        #[arg(short = 's', long)]
+        /// Conservado por compatibilidad. Sin efecto: el log siempre es
+        /// semantico ahora.
+        #[arg(short = 's', long, hide = true)]
         semantic: bool,
+        /// Salida en JSON estable (schema riku-log/v1).
+        #[arg(long)]
+        json: bool,
+        /// JSON compacto (una linea); por defecto pretty-printed.
+        #[arg(long)]
+        compact: bool,
+        /// Eleva el detalle: agrega entrada por componente/net cambiada.
+        #[arg(long, conflicts_with = "full")]
+        detail: bool,
+        /// Imprime el reporte completo del driver por archivo.
+        #[arg(long)]
+        full: bool,
+        /// Filtra por glob (puede repetirse). Ej: --paths 'amp_*.sch'.
+        #[arg(long = "paths", value_name = "PAT")]
+        paths: Vec<String>,
+        /// Empieza desde otra ref/oid en lugar de HEAD.
+        #[arg(long, value_name = "REF")]
+        branch: Option<String>,
     },
     /// Verifica que el entorno este correctamente configurado.
     Doctor {
@@ -126,9 +147,28 @@ pub fn run() -> ExitCode {
         Some(Commands::Diff { commit_a, commit_b, file_path, repo, format }) => {
             commands::run_diff(repo, &commit_a, &commit_b, &file_path, format)
         }
-        Some(Commands::Log { file_path, repo, limit, semantic }) => {
-            commands::run_log(repo, file_path.as_deref(), limit, semantic)
-        }
+        Some(Commands::Log {
+            file_path,
+            repo,
+            limit,
+            semantic: _,
+            json,
+            compact,
+            detail,
+            full,
+            paths,
+            branch,
+        }) => commands::run_log(commands::LogArgs {
+            repo,
+            file_path,
+            limit,
+            json,
+            compact,
+            detail,
+            full,
+            paths,
+            branch,
+        }),
         Some(Commands::Doctor { repo }) => commands::run_doctor(repo),
         Some(Commands::Status { .. }) => unreachable!(),
         Some(Commands::Open { file }) => commands::run_gui(file),

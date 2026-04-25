@@ -11,10 +11,9 @@ use std::process::Command;
 use serde_json::json;
 
 use crate::adapters::xschem_driver::XschemDriver;
-use crate::core::diff_view::{summarize_changes, DiffView};
-use crate::core::git_service::GitService;
+use crate::core::diff_view::DiffView;
+use crate::core::log;
 use crate::core::models::ChangeKind;
-use crate::core::ports::GitRepository;
 use crate::core::registry::get_drivers;
 use crate::core::status::{self, StatusOptions};
 use crate::core::summary::DetailLevel;
@@ -155,49 +154,47 @@ fn present_visual(
 
 // ─── Log ─────────────────────────────────────────────────────────────────────
 
-pub(super) fn run_log(
-    repo: PathBuf,
-    file_path: Option<&str>,
-    limit: usize,
-    semantic: bool,
-) -> Result<(), String> {
-    let svc = GitService::open(&repo).map_err(|e| e.to_string())?;
-    let commits = GitRepository::get_commits(&svc, file_path).map_err(|e| e.to_string())?;
+pub(super) struct LogArgs {
+    pub repo: PathBuf,
+    pub file_path: Option<String>,
+    pub limit: usize,
+    pub json: bool,
+    pub compact: bool,
+    pub detail: bool,
+    pub full: bool,
+    pub paths: Vec<String>,
+    pub branch: Option<String>,
+}
 
-    if commits.is_empty() {
-        println!("Sin commits encontrados.");
-        return Ok(());
+pub(super) fn run_log(args: LogArgs) -> Result<(), String> {
+    let level = if args.full {
+        DetailLevel::Completo
+    } else if args.detail {
+        DetailLevel::Detalle
+    } else {
+        DetailLevel::Resumen
+    };
+
+    // El path posicional se mapea a un patrón exacto en `paths` (compatibilidad
+    // con el comportamiento legado y atajo común).
+    let mut paths = args.paths;
+    if let Some(fp) = args.file_path {
+        paths.push(fp);
     }
 
-    for (idx, commit) in commits.iter().take(limit).enumerate() {
-        println!(
-            "{}  {:<20}  {}",
-            commit.short_id,
-            commit.author,
-            commit.message.chars().take(60).collect::<String>()
-        );
+    let opts = log::LogOptions {
+        level,
+        paths,
+        limit: Some(args.limit),
+        start: args.branch,
+    };
+    let report = log::analyze_with_options_path(&args.repo, &opts)
+        .map_err(|e| e.to_string())?;
 
-        if semantic {
-            if let Some(fp) = file_path {
-                if idx + 1 < commits.len() {
-                    if let Ok(report) = crate::core::analyzer::analyze_diff(
-                        &repo,
-                        &commits[idx + 1].oid,
-                        &commit.oid,
-                        fp,
-                    ) {
-                        let (added, removed, modified) = summarize_changes(&report.changes);
-                        let mut parts = Vec::new();
-                        if added > 0 { parts.push(format!("+{added}")); }
-                        if removed > 0 { parts.push(format!("-{removed}")); }
-                        if modified > 0 { parts.push(format!("~{modified}")); }
-                        if !parts.is_empty() {
-                            println!("           {}", parts.join("  "));
-                        }
-                    }
-                }
-            }
-        }
+    if args.json {
+        format::log_json::print(&report, !args.compact)?;
+    } else {
+        format::log_text::print(&report, level);
     }
     Ok(())
 }
@@ -330,9 +327,9 @@ pub(super) fn run_status(args: StatusArgs) -> Result<StatusOutcome, String> {
         .map_err(|e| e.to_string())?;
 
     if args.json {
-        format::json::print(&report, !args.compact)?;
+        format::status_json::print(&report, !args.compact)?;
     } else {
-        format::text::print(&report, level, args.include_unknown);
+        format::status_text::print(&report, level, args.include_unknown);
     }
 
     Ok(if report.has_semantic_changes() {

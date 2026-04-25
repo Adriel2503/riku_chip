@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::core::driver::Renderer;
 use crate::core::git_service::{
-    BranchInfo, ChangedFile, CommitInfo, GitError, GitService, WorkingChange,
+    BranchInfo, ChangedFile, CommitInfo, CommitWithParents, GitError, GitService, LogQuery,
+    WorkingChange,
 };
 use crate::core::models::{FileFormat, Schematic};
 
@@ -27,6 +29,28 @@ pub trait GitRepository {
     /// cada adapter a implementarlo si no aplica (repo en estado inicial).
     fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
         Ok(None)
+    }
+
+    /// Versión enriquecida de `get_commits` con filtros y padres por commit.
+    /// Default delega a `get_commits` y sintetiza padres vacíos para no romper
+    /// adapters existentes.
+    fn get_commits_with_options(
+        &self,
+        query: &LogQuery<'_>,
+    ) -> Result<Vec<CommitWithParents>, GitError> {
+        let mut commits = self.get_commits(query.file_path)?;
+        if let Some(limit) = query.limit {
+            commits.truncate(limit);
+        }
+        Ok(commits
+            .into_iter()
+            .map(|info| CommitWithParents { info, parents: Vec::new() })
+            .collect())
+    }
+
+    /// Mapa `oid → [refs]` para anotar el log. Default vacío.
+    fn refs_by_oid(&self) -> Result<HashMap<String, Vec<String>>, GitError> {
+        Ok(HashMap::new())
     }
 }
 
@@ -53,6 +77,17 @@ impl GitRepository for GitService {
 
     fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
         GitService::current_branch(self)
+    }
+
+    fn get_commits_with_options(
+        &self,
+        query: &LogQuery<'_>,
+    ) -> Result<Vec<CommitWithParents>, GitError> {
+        GitService::get_commits_with_options(self, query)
+    }
+
+    fn refs_by_oid(&self) -> Result<HashMap<String, Vec<String>>, GitError> {
+        GitService::refs_by_oid(self)
     }
 }
 

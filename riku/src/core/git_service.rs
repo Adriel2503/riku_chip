@@ -15,6 +15,27 @@ pub struct CommitInfo {
     pub timestamp: i64,
 }
 
+/// Como `CommitInfo`, pero con los OIDs de los padres para distinguir merge
+/// commits (más de un padre) y enlaces de historia. Solo lo emite el método
+/// `get_commits_with_options`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitWithParents {
+    pub info: CommitInfo,
+    /// OIDs (formato hex) de los padres. Vacío para el commit root.
+    pub parents: Vec<String>,
+}
+
+/// Filtros opcionales para recorrido de historia.
+#[derive(Debug, Default, Clone)]
+pub struct LogQuery<'a> {
+    /// Si está, solo se incluyen commits que tocan ese archivo.
+    pub file_path: Option<&'a str>,
+    /// Límite duro de commits devueltos. `None` = sin límite.
+    pub limit: Option<usize>,
+    /// Si está, comienza desde ese ref/oid en lugar de `HEAD`.
+    pub start: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangedFile {
     pub path: String,
@@ -235,6 +256,84 @@ impl GitService {
             ahead,
             behind,
         }))
+    }
+
+    /// Recorre historia con filtros opcionales (`LogQuery`) y emite commits con
+    /// sus padres. Útil para distinguir merges en `riku log`.
+    pub fn get_commits_with_options(
+        &self,
+        query: &LogQuery<'_>,
+    ) -> Result<Vec<CommitWithParents>, GitError> {
+        let start_oid = match query.start {
+            Some(refish) => self.resolve_commit(refish)?.id(),
+            None => self
+                .repo
+                .head()?
+                .target()
+                .ok_or_else(|| GitError::CommitNotFound("HEAD".to_string()))?,
+        };
+        let mut walker = self.repo.revwalk()?;
+        walker.push(start_oid)?;
+        walker.set_sorting(git2::Sort::TIME)?;
+
+        let limit = query.limit.unwrap_or(usize::MAX);
+        let mut results = Vec::new();
+        for oid in walker {
+            if results.len() >= limit {
+                break;
+            }
+            let oid = oid?;
+            let commit = self.repo.find_commit(oid)?;
+            if let Some(file_path) = query.file_path {
+                if !self.commit_touches(&commit, file_path)? {
+                    continue;
+                }
+            }
+            let info = CommitInfo {
+                oid: commit.id().to_string(),
+                short_id: commit.id().to_string().chars().take(7).collect(),
+                message: commit.message().unwrap_or("").trim().to_string(),
+                author: commit.author().name().unwrap_or("").to_string(),
+                timestamp: commit.author().when().seconds(),
+            };
+            let parents = (0..commit.parent_count())
+                .filter_map(|i| commit.parent_id(i).ok())
+                .map(|p| p.to_string())
+                .collect();
+            results.push(CommitWithParents { info, parents });
+        }
+        Ok(results)
+    }
+
+    /// Mapa `oid → [ref names]` de las refs locales (ramas + tags) que apuntan
+    /// a algún commit. Útil para anotar el log con etiquetas.
+    ///
+    /// Las ramas remotas se incluyen con prefijo `remotes/origin/...` para
+    /// poder distinguirlas. HEAD aparece como entrada propia si está resuelto.
+    pub fn refs_by_oid(&self) -> Result<std::collections::HashMap<String, Vec<String>>, GitError> {
+        let mut map: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+
+        // HEAD primero, para que aparezca al inicio en el orden de inserción.
+        if let Ok(head) = self.repo.head() {
+            if let Some(oid) = head.target() {
+                map.entry(oid.to_string()).or_default().push("HEAD".to_string());
+            }
+        }
+
+        let refs = self.repo.references()?;
+        for r in refs.flatten() {
+            let target = match r.target() {
+                Some(o) => o,
+                None => continue,
+            };
+            let name = match r.shorthand() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            map.entry(target.to_string()).or_default().push(name);
+        }
+        Ok(map)
     }
 
     fn upstream_relation(

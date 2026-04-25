@@ -1,8 +1,9 @@
 //! Formateadores de salida para los comandos.
 //!
-//! Cada submódulo entrega una representación distinta del mismo
-//! `StatusReport` (o futuros `LogReport`). Los comandos eligen el formateador
-//! según los flags del CLI; la lógica de dominio nunca conoce el formato.
+//! La lógica de dominio nunca conoce el formato. Los comandos eligen el
+//! formateador según los flags del CLI.
 
-pub mod json;
-pub mod text;
+pub mod log_json;
+pub mod log_text;
+pub mod status_json;
+pub mod status_text;
