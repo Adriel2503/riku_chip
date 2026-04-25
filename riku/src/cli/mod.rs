@@ -58,6 +58,14 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = ".")]
         repo: PathBuf,
     },
+    /// Muestra cambios semanticos en el working tree respecto a HEAD.
+    Status {
+        #[arg(short, long, default_value = ".")]
+        repo: PathBuf,
+        /// Lista tambien archivos sin driver (no reconocidos por Riku).
+        #[arg(long)]
+        include_unknown: bool,
+    },
     /// Abre un archivo .sch en el visor de escritorio.
     Open { file: Option<PathBuf> },
 }
@@ -76,6 +84,9 @@ pub fn run() -> ExitCode {
             commands::run_log(repo, file_path.as_deref(), limit, semantic)
         }
         Some(Commands::Doctor { repo }) => commands::run_doctor(repo),
+        Some(Commands::Status { repo, include_unknown }) => {
+            commands::run_status(repo, include_unknown)
+        }
         Some(Commands::Open { file }) => commands::run_gui(file),
     };
 

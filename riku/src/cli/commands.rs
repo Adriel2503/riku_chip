@@ -16,6 +16,8 @@ use crate::core::git_service::GitService;
 use crate::core::models::ChangeKind;
 use crate::core::ports::GitRepository;
 use crate::core::registry::get_drivers;
+use crate::core::status::{self, StatusReport};
+use crate::core::summary::{label_for, FileSummary, SummaryCategory};
 
 use super::OutputFormat;
 
@@ -288,6 +290,132 @@ pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
     }
     println!("Entorno listo.\n");
     Ok(())
+}
+
+// ─── Status ──────────────────────────────────────────────────────────────────
+
+pub(super) fn run_status(repo: PathBuf, include_unknown: bool) -> Result<(), String> {
+    let report = status::analyze(&repo).map_err(|e| e.to_string())?;
+    print_status_text(&report, include_unknown);
+    Ok(())
+}
+
+fn print_status_text(report: &StatusReport, include_unknown: bool) {
+    if let Some(b) = &report.branch {
+        let mut header = format!("En rama {} (HEAD {})", b.name, b.head_short);
+        if let Some(up) = &b.upstream {
+            let mut rel = String::new();
+            if b.ahead > 0 {
+                rel.push_str(&format!(" {} adelante", b.ahead));
+            }
+            if b.behind > 0 {
+                if !rel.is_empty() {
+                    rel.push(',');
+                }
+                rel.push_str(&format!(" {} atrás", b.behind));
+            }
+            if rel.is_empty() {
+                rel = " al día".to_string();
+            }
+            header.push_str(&format!(" — vs {up}:{rel}"));
+        }
+        println!("{header}");
+    } else {
+        println!("Repositorio sin HEAD (commit inicial pendiente).");
+    }
+
+    for w in &report.warnings {
+        eprintln!("[!] {w}");
+    }
+
+    let semantic: Vec<&FileSummary> = report
+        .files
+        .iter()
+        .filter(|f| f.category == SummaryCategory::Semantic)
+        .collect();
+    let cosmetic: Vec<&FileSummary> = report
+        .files
+        .iter()
+        .filter(|f| f.category == SummaryCategory::Cosmetic)
+        .collect();
+    let unchanged: Vec<&FileSummary> = report
+        .files
+        .iter()
+        .filter(|f| f.category == SummaryCategory::Unchanged)
+        .collect();
+    let unknown: Vec<&FileSummary> = report
+        .files
+        .iter()
+        .filter(|f| f.category == SummaryCategory::Unknown)
+        .collect();
+    let errored: Vec<&FileSummary> = report
+        .files
+        .iter()
+        .filter(|f| f.category == SummaryCategory::Error)
+        .collect();
+
+    if report.files.is_empty() {
+        println!();
+        println!("Sin cambios.");
+        return;
+    }
+
+    if !semantic.is_empty() {
+        println!();
+        println!("Modificados con cambios semánticos:");
+        for f in &semantic {
+            println!("  {}    {}", f.path, format_counts(f));
+        }
+    }
+    if !cosmetic.is_empty() {
+        println!();
+        println!("Modificados sin cambios semánticos:");
+        for f in &cosmetic {
+            println!("  {}    (solo cambios cosméticos)", f.path);
+        }
+    }
+    if !unchanged.is_empty() {
+        println!();
+        println!("Modificados sin diferencias detectadas por driver:");
+        for f in &unchanged {
+            println!("  {}", f.path);
+        }
+    }
+    if !errored.is_empty() {
+        println!();
+        println!("Errores al analizar:");
+        for f in &errored {
+            let msg = f.errors.first().map(String::as_str).unwrap_or("(sin detalle)");
+            println!("  {}    {msg}", f.path);
+        }
+    }
+    if !unknown.is_empty() {
+        if include_unknown {
+            println!();
+            println!("No reconocidos por Riku:");
+            for f in &unknown {
+                println!("  {}", f.path);
+            }
+        } else {
+            println!();
+            println!(
+                "No reconocidos por Riku ({}): use --include-unknown para listarlos.",
+                unknown.len()
+            );
+        }
+    }
+}
+
+fn format_counts(f: &FileSummary) -> String {
+    if f.counts.is_empty() {
+        return "(cambios sin detalle)".to_string();
+    }
+    let mut parts = Vec::with_capacity(f.counts.len());
+    for (key, count) in &f.counts {
+        let label = label_for(key, *count).unwrap_or_else(|| key.clone());
+        parts.push(format!("{count} {label}"));
+    }
+    parts.join(", ")
 }
 
 // ─── GUI ─────────────────────────────────────────────────────────────────────

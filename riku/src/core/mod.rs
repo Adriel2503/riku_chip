@@ -7,5 +7,7 @@ pub mod git_service;
 pub mod models;
 pub mod ports;
 pub mod registry;
+pub mod status;
+pub mod summary;
 pub mod svg_annotator;
 pub mod svg_cache;

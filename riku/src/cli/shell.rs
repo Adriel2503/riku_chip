@@ -190,6 +190,7 @@ fn print_shell_help() {
     println!("    cd <ruta>                                     cambiar directorio");
     println!();
     println!("  Git:");
+    println!("    status [--include-unknown]                    cambios semánticos en working tree");
     println!("    log [archivo.sch] [--semantic] [--limit <n>]  historial de commits");
     println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
     println!("    diff ... --format visual                      diff visual en HTML");
@@ -227,6 +228,10 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                 }
                 Some(Commands::Doctor { repo: r }) => {
                     commands::run_doctor(if r == PathBuf::from(".") { repo_path } else { r })
+                }
+                Some(Commands::Status { repo: r, include_unknown }) => {
+                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                    commands::run_status(effective_repo, include_unknown)
                 }
                 Some(Commands::Open { file }) => {
                     let effective = file.map(|f| {

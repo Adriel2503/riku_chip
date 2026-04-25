@@ -29,6 +29,23 @@ pub enum ChangeStatus {
     Renamed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkingChange {
+    pub path: String,
+    pub status: ChangeStatus,
+    pub old_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchInfo {
+    pub name: String,
+    pub head_oid: String,
+    pub head_short: String,
+    pub upstream: Option<String>,
+    pub ahead: usize,
+    pub behind: usize,
+}
+
 #[derive(Debug, Error)]
 pub enum GitError {
     #[error("no se encontro un repo Git desde {0}")]
@@ -148,6 +165,109 @@ impl GitService {
         Ok(results)
     }
 
+    /// Cambios en el working tree (incluyendo staged) respecto a HEAD.
+    ///
+    /// Combina índice y working tree en una sola lista — es lo que el usuario
+    /// percibe como "qué he tocado". Para casos avanzados (staged vs unstaged)
+    /// se pueden añadir métodos separados, pero la versión 1 los unifica.
+    pub fn working_tree_changes(&self) -> Result<Vec<WorkingChange>, GitError> {
+        let mut options = git2::StatusOptions::new();
+        options
+            .include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .renames_head_to_index(true)
+            .renames_index_to_workdir(true);
+        let statuses = self.repo.statuses(Some(&mut options))?;
+
+        let mut results = Vec::new();
+        for entry in statuses.iter() {
+            let st = entry.status();
+            if st.is_ignored() {
+                continue;
+            }
+            let path = match entry.path() {
+                Some(p) => p.to_string(),
+                None => continue,
+            };
+            let (status, old_path) = classify_status(st, entry.head_to_index(), entry.index_to_workdir());
+            results.push(WorkingChange { path, status, old_path });
+        }
+        Ok(results)
+    }
+
+    /// Información de la rama actual y su relación con upstream (si existe).
+    pub fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
+        let head = match self.repo.head() {
+            Ok(h) => h,
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch
+                || e.code() == git2::ErrorCode::NotFound =>
+            {
+                return Ok(None);
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        let head_oid = head
+            .target()
+            .ok_or_else(|| GitError::CommitNotFound("HEAD".to_string()))?;
+        let head_oid_str = head_oid.to_string();
+        let head_short: String = head_oid_str.chars().take(7).collect();
+
+        let name = if head.is_branch() {
+            head.shorthand().unwrap_or("HEAD").to_string()
+        } else {
+            "HEAD (detached)".to_string()
+        };
+
+        let (upstream, ahead, behind) = if head.is_branch() {
+            self.upstream_relation(&head)?
+        } else {
+            (None, 0, 0)
+        };
+
+        Ok(Some(BranchInfo {
+            name,
+            head_oid: head_oid_str,
+            head_short,
+            upstream,
+            ahead,
+            behind,
+        }))
+    }
+
+    fn upstream_relation(
+        &self,
+        head: &git2::Reference<'_>,
+    ) -> Result<(Option<String>, usize, usize), GitError> {
+        let branch_name = match head.shorthand() {
+            Some(n) => n,
+            None => return Ok((None, 0, 0)),
+        };
+        let branch = match self.repo.find_branch(branch_name, git2::BranchType::Local) {
+            Ok(b) => b,
+            Err(_) => return Ok((None, 0, 0)),
+        };
+        let upstream = match branch.upstream() {
+            Ok(u) => u,
+            Err(_) => return Ok((None, 0, 0)),
+        };
+        let upstream_name = upstream
+            .name()
+            .ok()
+            .flatten()
+            .map(|s| s.to_string());
+        let local_oid = head.target().unwrap_or_else(git2::Oid::zero);
+        let upstream_oid = upstream
+            .get()
+            .target()
+            .unwrap_or_else(git2::Oid::zero);
+        let (ahead, behind) = self
+            .repo
+            .graph_ahead_behind(local_oid, upstream_oid)
+            .unwrap_or((0, 0));
+        Ok((upstream_name, ahead, behind))
+    }
+
     fn resolve_commit(&self, commit_ish: &str) -> Result<git2::Commit<'_>, GitError> {
         let obj = self.repo.revparse_single(commit_ish)?;
         let commit = obj.peel_to_commit()?;
@@ -216,4 +336,38 @@ impl RepoRoot for GitService {
     fn root(&self) -> Option<&Path> {
         self.repo.workdir()
     }
+}
+
+fn classify_status(
+    st: git2::Status,
+    head_to_index: Option<git2::DiffDelta<'_>>,
+    index_to_workdir: Option<git2::DiffDelta<'_>>,
+) -> (ChangeStatus, Option<String>) {
+    let renamed = st.contains(git2::Status::INDEX_RENAMED)
+        || st.contains(git2::Status::WT_RENAMED);
+    let added = st.contains(git2::Status::INDEX_NEW)
+        || st.contains(git2::Status::WT_NEW);
+    let removed = st.contains(git2::Status::INDEX_DELETED)
+        || st.contains(git2::Status::WT_DELETED);
+
+    let old_path = if renamed {
+        head_to_index
+            .as_ref()
+            .or(index_to_workdir.as_ref())
+            .and_then(|d| d.old_file().path())
+            .map(|p| p.to_string_lossy().to_string())
+    } else {
+        None
+    };
+
+    let status = if renamed {
+        ChangeStatus::Renamed
+    } else if removed {
+        ChangeStatus::Removed
+    } else if added {
+        ChangeStatus::Added
+    } else {
+        ChangeStatus::Modified
+    };
+    (status, old_path)
 }

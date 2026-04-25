@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::core::driver::Renderer;
-use crate::core::git_service::{ChangedFile, CommitInfo, GitError, GitService};
+use crate::core::git_service::{
+    BranchInfo, ChangedFile, CommitInfo, GitError, GitService, WorkingChange,
+};
 use crate::core::models::{FileFormat, Schematic};
 
 pub trait GitRepository {
@@ -14,6 +16,18 @@ pub trait GitRepository {
         commit_a: &str,
         commit_b: &str,
     ) -> Result<Vec<ChangedFile>, GitError>;
+
+    /// Cambios en working tree vs HEAD. Default `Ok(vec![])` para no romper
+    /// implementaciones existentes (mocks de tests, futuros adaptadores).
+    fn working_tree_changes(&self) -> Result<Vec<WorkingChange>, GitError> {
+        Ok(Vec::new())
+    }
+
+    /// Información de la rama actual. Default `Ok(None)` para no forzar a
+    /// cada adapter a implementarlo si no aplica (repo en estado inicial).
+    fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
+        Ok(None)
+    }
 }
 
 impl GitRepository for GitService {
@@ -31,6 +45,14 @@ impl GitRepository for GitService {
         commit_b: &str,
     ) -> Result<Vec<ChangedFile>, GitError> {
         GitService::get_changed_files(self, commit_a, commit_b)
+    }
+
+    fn working_tree_changes(&self) -> Result<Vec<WorkingChange>, GitError> {
+        GitService::working_tree_changes(self)
+    }
+
+    fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
+        GitService::current_branch(self)
     }
 }
 
