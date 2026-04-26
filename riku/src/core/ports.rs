@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::core::driver::Renderer;
 use crate::core::git::git_service::{
@@ -98,11 +98,11 @@ pub trait SchematicParser {
 }
 
 pub trait RendererPort: Renderer {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<PathBuf>;
+    fn render(&self, content: &[u8], path_hint: &str) -> Option<String>;
 }
 
 impl<T: Renderer + ?Sized> RendererPort for T {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<PathBuf> {
+    fn render(&self, content: &[u8], path_hint: &str) -> Option<String> {
         Renderer::render(self, content, path_hint)
     }
 }

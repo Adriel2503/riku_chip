@@ -54,7 +54,9 @@ pub trait RikuDriver: Send + Sync {
 
     fn normalize(&self, content: &[u8], path_hint: &str) -> Vec<u8>;
 
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<std::path::PathBuf> {
+    /// Renderiza el contenido a un SVG en memoria. Default `None` para drivers
+    /// que no soportan render visual.
+    fn render(&self, content: &[u8], path_hint: &str) -> Option<String> {
         let _ = (content, path_hint);
         None
     }
@@ -75,11 +77,11 @@ pub trait RikuDriver: Send + Sync {
 }
 
 pub trait Renderer {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<std::path::PathBuf>;
+    fn render(&self, content: &[u8], path_hint: &str) -> Option<String>;
 }
 
 impl<T: RikuDriver + ?Sized> Renderer for T {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<std::path::PathBuf> {
+    fn render(&self, content: &[u8], path_hint: &str) -> Option<String> {
         RikuDriver::render(self, content, path_hint)
     }
 }

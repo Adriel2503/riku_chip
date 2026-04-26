@@ -1,9 +1,6 @@
-use std::path::PathBuf;
-
 use crate::core::driver::{DiffEntry, DriverDiffReport, DriverInfo, RikuDriver};
 use crate::core::format::detect_format;
 use crate::core::models::{ChangeKind, DriverKind, FileFormat, Schematic};
-use crate::core::rendering::svg_cache;
 
 /// Parsea un .sch a su vista semántica usando las opciones por defecto de
 /// riku (tema dark + símbolos de `.xschemrc`). Expuesto como helper para
@@ -143,17 +140,15 @@ impl RikuDriver for XschemDriver {
         content.to_vec()
     }
 
-    fn render(&self, content: &[u8], _path_hint: &str) -> Option<PathBuf> {
+    fn render(&self, content: &[u8], _path_hint: &str) -> Option<String> {
         let text = std::str::from_utf8(content).ok()?;
-        svg_cache::get_or_render(content, || {
-            let mut opts = xschem_viewer::RenderOptions::dark().with_sym_paths_from_xschemrc();
-            if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
-                let pdk_path = std::path::Path::new(&root).join(pdk).join("libs.tech/xschem");
-                if pdk_path.exists() {
-                    opts = opts.with_sym_path(pdk_path.to_string_lossy().to_string());
-                }
+        let mut opts = xschem_viewer::RenderOptions::dark().with_sym_paths_from_xschemrc();
+        if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
+            let pdk_path = std::path::Path::new(&root).join(pdk).join("libs.tech/xschem");
+            if pdk_path.exists() {
+                opts = opts.with_sym_path(pdk_path.to_string_lossy().to_string());
             }
-            xschem_viewer::Renderer::new(opts).render(text).ok().map(|r| r.svg)
-        })
+        }
+        xschem_viewer::Renderer::new(opts).render(text).ok().map(|r| r.svg)
     }
 }

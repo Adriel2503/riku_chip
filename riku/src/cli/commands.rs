@@ -203,6 +203,7 @@ pub(super) fn run_log(args: LogArgs) -> Result<(), String> {
 
 pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
     println!("\nRiku Doctor — Diagnóstico del Entorno\n");
+    #[allow(unused_mut)]
     let mut any_error = false;
 
     println!("--- Repositorio Git ---");
@@ -271,15 +272,6 @@ pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
         let info = driver.info();
         let status = if info.available { "[ok]" } else { "[x]" };
         println!("  {status}  {:10} {}", info.name, info.version);
-    }
-
-    println!("\n--- Sistema ---");
-    let cache = dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("riku");
-    if std::fs::create_dir_all(&cache).is_ok() {
-        println!("  [ok]  Caché: {}", cache.display());
-    } else {
-        println!("  [x]  Caché: no accesible en {}", cache.display());
-        any_error = true;
     }
 
     println!();

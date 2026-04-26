@@ -72,16 +72,13 @@ impl DiffView {
         let sch_b = parse_fn(&content_b);
         let svg_b = driver
             .render(&content_b, file_path)
-            .and_then(|p| std::fs::read_to_string(&p).ok())
             .ok_or_else(|| DiffViewError::Render(format!("{file_path} (commit {commit_b})")))?;
 
         // ── Commit A (opcional — puede no existir si el archivo es nuevo) ─
         let (svg_a, sch_a, content_a) = match repo.get_blob(commit_a, file_path) {
             Ok(bytes) => {
                 let sch = parse_fn(&bytes);
-                let svg = driver
-                    .render(&bytes, file_path)
-                    .and_then(|p| std::fs::read_to_string(&p).ok());
+                let svg = driver.render(&bytes, file_path);
                 (svg, Some(sch), Some(bytes))
             }
             Err(GitError::BlobNotFound { .. }) => (None, None, None),
