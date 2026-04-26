@@ -11,9 +11,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::core::git::git_service::{
-    BranchInfo, ChangeStatus, GitError, GitService, WorkingChange,
-};
+use crate::core::domain::git_types::{BranchInfo, ChangeStatus, GitError, WorkingChange};
+use crate::core::git::git_service::GitService;
 use crate::core::domain::ports::{GitRepository, RepoRoot};
 use crate::core::path_matcher::PathMatcher;
 use crate::adapters::registry::get_driver_for;
@@ -197,7 +196,7 @@ fn read_workdir(workdir: Option<&Path>, rel_path: &str) -> Result<Vec<u8>, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::git::git_service::{ChangedFile, CommitInfo};
+    use crate::core::domain::git_types::{ChangedFile, CommitInfo};
 
     /// Repo mock que solo provee working_tree_changes y get_blob — suficiente
     /// para ejercitar `analyze_with_repo` sin tocar disco real.

@@ -279,7 +279,7 @@ fn git_service_log_semantic_across_revisions() {
 
 #[test]
 fn large_blob_threshold_is_honored() {
-    use riku::core::git::git_service::LARGE_BLOB_THRESHOLD;
+    use riku::core::domain::git_types::LARGE_BLOB_THRESHOLD;
 
     // Verificar que el threshold esta definido y es razonable (50 MB)
     assert_eq!(LARGE_BLOB_THRESHOLD, 50 * 1024 * 1024);

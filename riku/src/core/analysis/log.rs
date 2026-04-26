@@ -12,9 +12,10 @@ use thiserror::Error;
 
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::ports::GitRepository;
-use crate::core::git::git_service::{
-    ChangeStatus, CommitInfo, CommitWithParents, GitError, GitService, LogQuery,
+use crate::core::domain::git_types::{
+    ChangeStatus, CommitInfo, CommitWithParents, GitError, LogQuery,
 };
+use crate::core::git::git_service::GitService;
 use crate::core::path_matcher::PathMatcher;
 use crate::adapters::registry::get_driver_for;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
@@ -229,7 +230,7 @@ mod tests {
     use super::*;
     use crate::core::domain::driver::DriverDiffReport;
     use crate::core::domain::models::FileFormat;
-    use crate::core::git::git_service::{BranchInfo, ChangedFile, WorkingChange};
+    use crate::core::domain::git_types::{BranchInfo, ChangedFile, WorkingChange};
 
     struct MockRepo {
         commits: Vec<CommitWithParents>,

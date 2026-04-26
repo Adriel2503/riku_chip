@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::core::git::git_service::GitError;
+use crate::core::domain::git_types::GitError;
 
 #[derive(Debug, Error)]
 pub enum RikuError {

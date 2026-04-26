@@ -5,7 +5,8 @@ use thiserror::Error;
 use crate::core::domain::driver::RikuDriver;
 use crate::core::domain::models::{ChangeKind, ComponentDiff, DiffReport, Schematic};
 use crate::core::domain::ports::GitRepository;
-use crate::core::git::git_service::{GitError, GitService};
+use crate::core::domain::git_types::GitError;
+use crate::core::git::git_service::GitService;
 
 // ─── Error ───────────────────────────────────────────────────────────────────
 

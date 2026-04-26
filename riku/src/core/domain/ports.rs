@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::core::domain::driver::Renderer;
-use crate::core::git::git_service::{
-    BranchInfo, ChangedFile, CommitInfo, CommitWithParents, GitError, GitService, LogQuery,
-    WorkingChange,
+use crate::core::domain::git_types::{
+    BranchInfo, ChangedFile, CommitInfo, CommitWithParents, GitError, LogQuery, WorkingChange,
 };
 use crate::core::domain::models::{FileFormat, Schematic};
 
@@ -51,43 +50,6 @@ pub trait GitRepository {
     /// Mapa `oid → [refs]` para anotar el log. Default vacío.
     fn refs_by_oid(&self) -> Result<HashMap<String, Vec<String>>, GitError> {
         Ok(HashMap::new())
-    }
-}
-
-impl GitRepository for GitService {
-    fn get_blob(&self, commit_ish: &str, file_path: &str) -> Result<Vec<u8>, GitError> {
-        GitService::get_blob(self, commit_ish, file_path)
-    }
-
-    fn get_commits(&self, file_path: Option<&str>) -> Result<Vec<CommitInfo>, GitError> {
-        GitService::get_commits(self, file_path)
-    }
-
-    fn get_changed_files(
-        &self,
-        commit_a: &str,
-        commit_b: &str,
-    ) -> Result<Vec<ChangedFile>, GitError> {
-        GitService::get_changed_files(self, commit_a, commit_b)
-    }
-
-    fn working_tree_changes(&self) -> Result<Vec<WorkingChange>, GitError> {
-        GitService::working_tree_changes(self)
-    }
-
-    fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
-        GitService::current_branch(self)
-    }
-
-    fn get_commits_with_options(
-        &self,
-        query: &LogQuery<'_>,
-    ) -> Result<Vec<CommitWithParents>, GitError> {
-        GitService::get_commits_with_options(self, query)
-    }
-
-    fn refs_by_oid(&self) -> Result<HashMap<String, Vec<String>>, GitError> {
-        GitService::refs_by_oid(self)
     }
 }
 
