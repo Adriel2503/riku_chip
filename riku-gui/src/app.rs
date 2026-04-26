@@ -264,7 +264,7 @@ impl RikuGuiApp {
 
     fn load_diff(&mut self, repo: &Path, commit_a: &str, commit_b: &str, file: &Path) -> Result<(), String> {
         use riku::adapters::xschem_driver::XschemDriver;
-        use riku::core::diff_view::DiffView;
+        use riku::core::analysis::diff_view::DiffView;
         use riku::adapters::xschem_driver::parse;
 
         let file_str = file.to_string_lossy();
@@ -521,7 +521,7 @@ fn build_scene(content: &str) -> Result<xschem_viewer::ResolvedScene, String> {
 
 
 fn get_blob_content(repo: &Path, commit: &str, file_path: &str) -> Result<String, String> {
-    use riku::core::git_service::GitService;
+    use riku::core::git::git_service::GitService;
     let svc = GitService::open(repo).map_err(|e| e.to_string())?;
     let bytes = svc.get_blob(commit, file_path).map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|e| e.to_string())
