@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::adapters::registry::get_driver_for;
+use crate::core::analysis::blob_io;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 use crate::core::domain::git_types::{BranchInfo, ChangeStatus, GitError, WorkingChange};
 use crate::core::domain::ports::{GitRepository, RepoRoot};
@@ -156,15 +157,8 @@ fn summarize_change<R: GitRepository + ?Sized>(
     // Contenido "antes": HEAD si el archivo existía allí; vacío si nuevo.
     let content_before = match change.status {
         ChangeStatus::Added => Vec::new(),
-        _ => match repo.get_blob("HEAD", change.path.as_str()) {
-            Ok(bytes) => bytes,
-            Err(GitError::BlobNotFound { .. }) => Vec::new(),
-            Err(GitError::LargeBlob { path, size }) => {
-                warnings.push(format!(
-                    "{path} ({size} bytes) demasiado grande en HEAD; se asume vacío."
-                ));
-                Vec::new()
-            }
+        _ => match blob_io::read_blob_lenient(repo, "HEAD", change.path.as_str(), warnings) {
+            Ok(bytes) => bytes.unwrap_or_default(),
             Err(e) => return FileSummary::error(&change.path, e.to_string()),
         },
     };

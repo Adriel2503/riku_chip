@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::adapters::registry::get_driver_for;
+use crate::core::analysis::blob_io;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::git_types::{
@@ -197,26 +198,12 @@ fn diff_against_parent<R: GitRepository + ?Sized>(
         let content_before = if cf.status == ChangeStatus::Added {
             Vec::new()
         } else {
-            match repo.get_blob(parent, &cf.path) {
-                Ok(b) => b,
-                Err(GitError::BlobNotFound { .. }) => Vec::new(),
-                Err(e) => {
-                    warnings.push(format!("{} en {parent}: {e}", cf.path));
-                    Vec::new()
-                }
-            }
+            blob_io::read_blob_silent(repo, parent, &cf.path, warnings)
         };
         let content_after = if cf.status == ChangeStatus::Removed {
             Vec::new()
         } else {
-            match repo.get_blob(commit, &cf.path) {
-                Ok(b) => b,
-                Err(GitError::BlobNotFound { .. }) => Vec::new(),
-                Err(e) => {
-                    warnings.push(format!("{} en {commit}: {e}", cf.path));
-                    Vec::new()
-                }
-            }
+            blob_io::read_blob_silent(repo, commit, &cf.path, warnings)
         };
 
         let report: DriverDiffReport = driver.diff(&content_before, &content_after, &cf.path);
@@ -237,9 +224,7 @@ fn diff_against_parent<R: GitRepository + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::domain::driver::DriverDiffReport;
     use crate::core::domain::git_types::{BranchInfo, ChangedFile, WorkingChange};
-    use crate::core::domain::models::FileFormat;
 
     struct MockRepo {
         commits: Vec<CommitWithParents>,
@@ -372,9 +357,4 @@ mod tests {
         assert!(v.get("commits").is_some());
     }
 
-    // Defensa contra advertencias por warning de tipo no usado en algunos
-    // builds: el `DriverDiffReport` y `FileFormat` están importados para
-    // futuras extensiones (si se añaden tests con drivers reales).
-    #[allow(dead_code)]
-    fn _unused_imports_anchor(_a: DriverDiffReport, _b: FileFormat) {}
 }

@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::core::domain::driver::Renderer;
 use crate::core::domain::git_types::{
     BranchInfo, ChangedFile, CommitInfo, CommitWithParents, GitError, LogQuery, WorkingChange,
 };
-use crate::core::domain::models::{FileFormat, Schematic};
 
 pub trait GitRepository {
     fn get_blob(&self, commit_ish: &str, file_path: &str) -> Result<Vec<u8>, GitError>;
@@ -54,26 +52,6 @@ pub trait GitRepository {
     fn refs_by_oid(&self) -> Result<HashMap<String, Vec<String>>, GitError> {
         Ok(HashMap::new())
     }
-}
-
-pub trait SchematicParser {
-    fn detect_format(&self, content: &[u8]) -> FileFormat;
-
-    fn parse(&self, content: &[u8]) -> Schematic;
-}
-
-pub trait RendererPort: Renderer {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<String>;
-}
-
-impl<T: Renderer + ?Sized> RendererPort for T {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<String> {
-        Renderer::render(self, content, path_hint)
-    }
-}
-
-pub trait DriverContract: RendererPort {
-    fn can_handle(&self, filename: &str) -> bool;
 }
 
 pub trait RepoRoot {

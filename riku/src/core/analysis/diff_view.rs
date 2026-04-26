@@ -2,6 +2,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use crate::core::analysis::blob_io;
 use crate::core::domain::driver::RikuDriver;
 use crate::core::domain::git_types::GitError;
 use crate::core::domain::models::{ChangeKind, ComponentDiff, DiffReport, Schematic};
@@ -77,20 +78,15 @@ impl DiffView {
             .ok_or_else(|| DiffViewError::Render(format!("{file_path} (commit {commit_b})")))?;
 
         // ── Commit A (opcional — puede no existir si el archivo es nuevo) ─
-        let (svg_a, sch_a, content_a) = match repo.get_blob(commit_a, file_path) {
-            Ok(bytes) => {
+        let bytes_a = blob_io::read_blob_lenient(repo, commit_a, file_path, &mut warnings)
+            .map_err(DiffViewError::Git)?;
+        let (svg_a, sch_a, content_a) = match bytes_a {
+            Some(bytes) => {
                 let sch = parse_fn(&bytes);
                 let svg = driver.render(&bytes, file_path);
                 (svg, Some(sch), Some(bytes))
             }
-            Err(GitError::BlobNotFound { .. }) => (None, None, None),
-            Err(GitError::LargeBlob { path, size }) => {
-                warnings.push(format!(
-                    "{path} ({size} bytes) es demasiado grande; omitiendo."
-                ));
-                (None, None, None)
-            }
-            Err(e) => return Err(DiffViewError::Git(e)),
+            None => (None, None, None),
         };
 
         // ── Diff semántico ────────────────────────────────────────────────
@@ -141,25 +137,6 @@ pub fn driver_report_to_diff_report(
             .collect(),
         is_move_all: changes.iter().any(|c| c.element == "layout" && c.cosmetic),
     }
-}
-
-/// Cuenta cambios no cosméticos por tipo. Útil para el log --semantic.
-pub fn summarize_changes(
-    changes: &[crate::core::domain::driver::DiffEntry],
-) -> (usize, usize, usize) {
-    let added = changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Added && !c.cosmetic)
-        .count();
-    let removed = changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Removed && !c.cosmetic)
-        .count();
-    let modified = changes
-        .iter()
-        .filter(|c| c.kind == ChangeKind::Modified && !c.cosmetic)
-        .count();
-    (added, removed, modified)
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -213,37 +190,6 @@ mod tests {
         assert_eq!(diff.components[0].name, "R1");
         assert_eq!(diff.nets_added, vec!["Vdd"]);
         assert!(diff.is_move_all);
-    }
-
-    #[test]
-    fn summarize_ignora_cosmeticos() {
-        let report = make_report(vec![
-            DiffEntry {
-                kind: ChangeKind::Added,
-                element: "R1".to_string(),
-                before: None,
-                after: None,
-                cosmetic: true,
-                position_changed: false,
-            },
-            DiffEntry {
-                kind: ChangeKind::Removed,
-                element: "C1".to_string(),
-                before: None,
-                after: None,
-                cosmetic: false,
-                position_changed: false,
-            },
-            DiffEntry {
-                kind: ChangeKind::Modified,
-                element: "M1".to_string(),
-                before: None,
-                after: None,
-                cosmetic: false,
-                position_changed: false,
-            },
-        ]);
-        assert_eq!(summarize_changes(&report.changes), (0, 1, 1));
     }
 
     #[test]

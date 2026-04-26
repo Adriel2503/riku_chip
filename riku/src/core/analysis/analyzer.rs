@@ -3,6 +3,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::adapters::registry::get_driver_for;
+use crate::core::analysis::blob_io;
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::error::RikuError;
 use crate::core::domain::git_types::GitError;
@@ -49,28 +50,10 @@ pub fn analyze_diff_with_repo<R: GitRepository + ?Sized>(
     };
 
     let mut warnings = Vec::new();
-    let content_a = match repo.get_blob(commit_a, file_path) {
-        Ok(bytes) => bytes,
-        Err(GitError::LargeBlob { path, size }) => {
-            warnings.push(format!(
-                "{path} ({size} bytes) es demasiado grande; usando diff vacio."
-            ));
-            Vec::new()
-        }
-        Err(GitError::BlobNotFound { .. }) => Vec::new(),
-        Err(err) => return Err(err.into()),
-    };
-    let content_b = match repo.get_blob(commit_b, file_path) {
-        Ok(bytes) => bytes,
-        Err(GitError::LargeBlob { path, size }) => {
-            warnings.push(format!(
-                "{path} ({size} bytes) es demasiado grande; usando diff vacio."
-            ));
-            Vec::new()
-        }
-        Err(GitError::BlobNotFound { .. }) => Vec::new(),
-        Err(err) => return Err(err.into()),
-    };
+    let content_a = blob_io::read_blob_lenient(repo, commit_a, file_path, &mut warnings)?
+        .unwrap_or_default();
+    let content_b = blob_io::read_blob_lenient(repo, commit_b, file_path, &mut warnings)?
+        .unwrap_or_default();
 
     let mut report = driver.diff(&content_a, &content_b, file_path);
     report.warnings.extend(warnings);

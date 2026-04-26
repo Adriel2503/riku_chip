@@ -75,13 +75,3 @@ pub trait RikuDriver: Send + Sync {
         self.info().extensions.iter().any(|ext| ext == &suffix)
     }
 }
-
-pub trait Renderer {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<String>;
-}
-
-impl<T: RikuDriver + ?Sized> Renderer for T {
-    fn render(&self, content: &[u8], path_hint: &str) -> Option<String> {
-        RikuDriver::render(self, content, path_hint)
-    }
-}

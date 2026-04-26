@@ -200,7 +200,7 @@ src/
     registry.rs         — despacho de driver por extensión
     semantic_diff.rs    — diff semántico de Schematics
     svg_annotator.rs    — inyección de anotaciones SVG
-    ports.rs            — traits GitRepository, SchematicParser
+    ports.rs            — traits GitRepository, RepoRoot
   parsers/
     xschem.rs           — delega en xschem_viewer
   adapters/
