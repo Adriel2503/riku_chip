@@ -20,11 +20,8 @@ clap = { version = "4.5.60", features = ["derive"] }
 dirs = "6.0.0"
 git2 = "0.20.4"
 glob = "0.3"
-once_cell = "1.21.4"
-regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-tempfile = "3.27.0"
 thiserror = "2.0.18"
 rustyline = "14.0"
 # Path local: mientras viewer-core no esté publicado en crates.io, la
