@@ -90,7 +90,9 @@ pub fn annotate(
 #[cfg(test)]
 mod tests {
     use super::annotate;
-    use crate::core::domain::models::{ChangeKind, Component, ComponentDiff, DiffReport, Schematic, Wire};
+    use crate::core::domain::models::{
+        ChangeKind, Component, ComponentDiff, DiffReport, Schematic, Wire,
+    };
     use crate::core::rendering::styles::annotation_style;
     use std::collections::{BTreeMap, BTreeSet};
 

@@ -11,7 +11,7 @@
 //! reusando los mismos formateadores que `status` para consistencia.
 
 use crate::core::analysis::log::{LogCommit, LogReport};
-use crate::core::analysis::summary::{label_for, DetailEntry, DetailLevel, FileSummary};
+use crate::core::analysis::summary::{DetailEntry, DetailLevel, FileSummary, label_for};
 
 pub fn print(report: &LogReport, level: DetailLevel) {
     for w in &report.warnings {
@@ -39,7 +39,13 @@ fn print_commit(c: &LogCommit, level: DetailLevel) {
     };
     let merge_tag = if c.is_merge { " [merge]" } else { "" };
 
-    println!("* {}{}{}  {}", c.info.short_id, refs, merge_tag, first_line(&c.info.message));
+    println!(
+        "* {}{}{}  {}",
+        c.info.short_id,
+        refs,
+        merge_tag,
+        first_line(&c.info.message)
+    );
     println!(
         "          {} · {}",
         c.info.author,

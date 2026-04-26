@@ -4,8 +4,8 @@ use std::path::Path;
 use git2::{DiffOptions, Oid, Repository};
 
 use crate::core::domain::git_types::{
-    BranchInfo, ChangeStatus, ChangedFile, CommitInfo, CommitWithParents, GitError, LogQuery,
-    WorkingChange, LARGE_BLOB_THRESHOLD,
+    BranchInfo, ChangeStatus, ChangedFile, CommitInfo, CommitWithParents, GitError,
+    LARGE_BLOB_THRESHOLD, LogQuery, WorkingChange,
 };
 use crate::core::domain::ports::{GitRepository, RepoRoot};
 
@@ -136,8 +136,13 @@ impl GitService {
                 Some(p) => p.to_string(),
                 None => continue,
             };
-            let (status, old_path) = classify_status(st, entry.head_to_index(), entry.index_to_workdir());
-            results.push(WorkingChange { path, status, old_path });
+            let (status, old_path) =
+                classify_status(st, entry.head_to_index(), entry.index_to_workdir());
+            results.push(WorkingChange {
+                path,
+                status,
+                old_path,
+            });
         }
         Ok(results)
     }
@@ -146,8 +151,9 @@ impl GitService {
     pub fn current_branch(&self) -> Result<Option<BranchInfo>, GitError> {
         let head = match self.repo.head() {
             Ok(h) => h,
-            Err(e) if e.code() == git2::ErrorCode::UnbornBranch
-                || e.code() == git2::ErrorCode::NotFound =>
+            Err(e)
+                if e.code() == git2::ErrorCode::UnbornBranch
+                    || e.code() == git2::ErrorCode::NotFound =>
             {
                 return Ok(None);
             }
@@ -241,7 +247,9 @@ impl GitService {
         // HEAD primero, para que aparezca al inicio en el orden de inserción.
         if let Ok(head) = self.repo.head() {
             if let Some(oid) = head.target() {
-                map.entry(oid.to_string()).or_default().push("HEAD".to_string());
+                map.entry(oid.to_string())
+                    .or_default()
+                    .push("HEAD".to_string());
             }
         }
 
@@ -276,16 +284,9 @@ impl GitService {
             Ok(u) => u,
             Err(_) => return Ok((None, 0, 0)),
         };
-        let upstream_name = upstream
-            .name()
-            .ok()
-            .flatten()
-            .map(|s| s.to_string());
+        let upstream_name = upstream.name().ok().flatten().map(|s| s.to_string());
         let local_oid = head.target().unwrap_or_else(git2::Oid::zero);
-        let upstream_oid = upstream
-            .get()
-            .target()
-            .unwrap_or_else(git2::Oid::zero);
+        let upstream_oid = upstream.get().target().unwrap_or_else(git2::Oid::zero);
         let (ahead, behind) = self
             .repo
             .graph_ahead_behind(local_oid, upstream_oid)
@@ -405,12 +406,9 @@ fn classify_status(
     head_to_index: Option<git2::DiffDelta<'_>>,
     index_to_workdir: Option<git2::DiffDelta<'_>>,
 ) -> (ChangeStatus, Option<String>) {
-    let renamed = st.contains(git2::Status::INDEX_RENAMED)
-        || st.contains(git2::Status::WT_RENAMED);
-    let added = st.contains(git2::Status::INDEX_NEW)
-        || st.contains(git2::Status::WT_NEW);
-    let removed = st.contains(git2::Status::INDEX_DELETED)
-        || st.contains(git2::Status::WT_DELETED);
+    let renamed = st.contains(git2::Status::INDEX_RENAMED) || st.contains(git2::Status::WT_RENAMED);
+    let added = st.contains(git2::Status::INDEX_NEW) || st.contains(git2::Status::WT_NEW);
+    let removed = st.contains(git2::Status::INDEX_DELETED) || st.contains(git2::Status::WT_DELETED);
 
     let old_path = if renamed {
         head_to_index

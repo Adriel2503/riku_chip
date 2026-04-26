@@ -122,11 +122,7 @@ impl FileSummary {
     }
 
     /// Construye un summary desde un `DriverDiffReport` con el nivel solicitado.
-    pub fn from_report_with(
-        report: &DriverDiffReport,
-        path: &str,
-        level: DetailLevel,
-    ) -> Self {
+    pub fn from_report_with(report: &DriverDiffReport, path: &str, level: DetailLevel) -> Self {
         let mut counts: BTreeMap<String, i64> = BTreeMap::new();
         let mut details: Vec<DetailEntry> = Vec::new();
         let mut semantic_changes = 0i64;
@@ -354,8 +350,14 @@ mod tests {
 
     #[test]
     fn label_for_singular_y_plural() {
-        assert_eq!(label_for(labels::COMPONENTS_ADDED, 1).unwrap(), "componente añadido");
-        assert_eq!(label_for(labels::COMPONENTS_ADDED, 3).unwrap(), "componentes añadidos");
+        assert_eq!(
+            label_for(labels::COMPONENTS_ADDED, 1).unwrap(),
+            "componente añadido"
+        );
+        assert_eq!(
+            label_for(labels::COMPONENTS_ADDED, 3).unwrap(),
+            "componentes añadidos"
+        );
         assert_eq!(label_for("clave_desconocida", 1), None);
     }
 

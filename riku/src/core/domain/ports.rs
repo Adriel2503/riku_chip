@@ -43,7 +43,10 @@ pub trait GitRepository {
         }
         Ok(commits
             .into_iter()
-            .map(|info| CommitWithParents { info, parents: Vec::new() })
+            .map(|info| CommitWithParents {
+                info,
+                parents: Vec::new(),
+            })
             .collect())
     }
 

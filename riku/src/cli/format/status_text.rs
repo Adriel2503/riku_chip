@@ -5,10 +5,12 @@
 //! - `Detalle`: añade entradas por componente/net cambiada.
 //! - `Completo`: imprime el `DriverDiffReport` íntegro tras el resumen.
 
+use crate::core::analysis::status::StatusReport;
+use crate::core::analysis::summary::{
+    DetailEntry, DetailLevel, FileSummary, SummaryCategory, label_for,
+};
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::models::ChangeKind;
-use crate::core::analysis::status::StatusReport;
-use crate::core::analysis::summary::{label_for, DetailEntry, DetailLevel, FileSummary, SummaryCategory};
 
 /// Imprime el reporte completo en stdout, los warnings en stderr.
 pub fn print(report: &StatusReport, level: DetailLevel, include_unknown: bool) {
@@ -89,7 +91,11 @@ fn print_categorized(report: &StatusReport, level: DetailLevel, include_unknown:
         println!();
         println!("Errores al analizar:");
         for f in &errored {
-            let msg = f.errors.first().map(String::as_str).unwrap_or("(sin detalle)");
+            let msg = f
+                .errors
+                .first()
+                .map(String::as_str)
+                .unwrap_or("(sin detalle)");
             println!("  {}    {msg}", f.path);
         }
     }

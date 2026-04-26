@@ -13,10 +13,8 @@ use serde::{Deserialize, Serialize};
 // ─── Re-exports desde xschem-viewer ──────────────────────────────────────────
 
 pub use xschem_viewer::semantic::{
-    ChangeKind, ComponentDiff, DiffReport,
-    SemanticComponent as Component,
-    SemanticSchematic as Schematic,
-    SemanticWire as Wire,
+    ChangeKind, ComponentDiff, DiffReport, SemanticComponent as Component,
+    SemanticSchematic as Schematic, SemanticWire as Wire,
 };
 
 // ─── Tipos propios de riku ───────────────────────────────────────────────────

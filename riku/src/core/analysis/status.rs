@@ -11,12 +11,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::core::domain::git_types::{BranchInfo, ChangeStatus, GitError, WorkingChange};
-use crate::core::git::git_service::GitService;
-use crate::core::domain::ports::{GitRepository, RepoRoot};
-use crate::core::path_matcher::PathMatcher;
 use crate::adapters::registry::get_driver_for;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
+use crate::core::domain::git_types::{BranchInfo, ChangeStatus, GitError, WorkingChange};
+use crate::core::domain::ports::{GitRepository, RepoRoot};
+use crate::core::git::git_service::GitService;
+use crate::core::path_matcher::PathMatcher;
 
 // ─── Errores ─────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,10 @@ pub struct EnvelopedStatusReport<'a> {
 
 impl<'a> From<&'a StatusReport> for EnvelopedStatusReport<'a> {
     fn from(inner: &'a StatusReport) -> Self {
-        Self { schema: STATUS_SCHEMA, inner }
+        Self {
+            schema: STATUS_SCHEMA,
+            inner,
+        }
     }
 }
 
@@ -65,10 +68,7 @@ impl StatusReport {
     }
 
     pub fn count_by_category(&self, cat: SummaryCategory) -> usize {
-        self.files
-            .iter()
-            .filter(|f| f.category == cat)
-            .count()
+        self.files.iter().filter(|f| f.category == cat).count()
     }
 }
 
@@ -132,7 +132,11 @@ pub fn analyze_with_options<R: GitRepository + ?Sized>(
     }
 
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(StatusReport { branch, files, warnings })
+    Ok(StatusReport {
+        branch,
+        files,
+        warnings,
+    })
 }
 
 // ─── Resumen por archivo ─────────────────────────────────────────────────────
@@ -251,8 +255,16 @@ mod tests {
     fn lista_se_ordena_por_path() {
         let repo = MockRepo {
             changes: vec![
-                WorkingChange { path: "z.txt".into(), status: ChangeStatus::Modified, old_path: None },
-                WorkingChange { path: "a.txt".into(), status: ChangeStatus::Modified, old_path: None },
+                WorkingChange {
+                    path: "z.txt".into(),
+                    status: ChangeStatus::Modified,
+                    old_path: None,
+                },
+                WorkingChange {
+                    path: "a.txt".into(),
+                    status: ChangeStatus::Modified,
+                    old_path: None,
+                },
             ],
             head_blobs: Default::default(),
             branch: None,
@@ -266,9 +278,21 @@ mod tests {
     fn paths_filtra_por_glob() {
         let repo = MockRepo {
             changes: vec![
-                WorkingChange { path: "amp_ota.sch".into(), status: ChangeStatus::Modified, old_path: None },
-                WorkingChange { path: "filtro.sch".into(), status: ChangeStatus::Modified, old_path: None },
-                WorkingChange { path: "Makefile".into(), status: ChangeStatus::Modified, old_path: None },
+                WorkingChange {
+                    path: "amp_ota.sch".into(),
+                    status: ChangeStatus::Modified,
+                    old_path: None,
+                },
+                WorkingChange {
+                    path: "filtro.sch".into(),
+                    status: ChangeStatus::Modified,
+                    old_path: None,
+                },
+                WorkingChange {
+                    path: "Makefile".into(),
+                    status: ChangeStatus::Modified,
+                    old_path: None,
+                },
             ],
             head_blobs: Default::default(),
             branch: None,
@@ -297,7 +321,10 @@ mod tests {
             }),
         };
         let report = analyze_with_repo(&repo, None).unwrap();
-        assert_eq!(report.branch.as_ref().map(|b| b.name.as_str()), Some("feature-amp"));
+        assert_eq!(
+            report.branch.as_ref().map(|b| b.name.as_str()),
+            Some("feature-amp")
+        );
     }
 
     // ── Tests del contrato JSON (schema riku-status/v1) ──────────────────
@@ -349,8 +376,17 @@ mod tests {
         let report = fixture_report();
         let v = serde_json::to_value(EnvelopedStatusReport::from(&report)).unwrap();
         let file = &v["files"][0];
-        assert!(file.get("details").is_none(), "details vacío no debe aparecer");
-        assert!(file.get("full_report").is_none(), "full_report ausente no debe aparecer");
-        assert!(file.get("errors").is_none(), "errors vacío no debe aparecer");
+        assert!(
+            file.get("details").is_none(),
+            "details vacío no debe aparecer"
+        );
+        assert!(
+            file.get("full_report").is_none(),
+            "full_report ausente no debe aparecer"
+        );
+        assert!(
+            file.get("errors").is_none(),
+            "errors vacío no debe aparecer"
+        );
     }
 }

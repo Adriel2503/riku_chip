@@ -2,13 +2,13 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use crate::adapters::registry::get_driver_for;
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::error::RikuError;
+use crate::core::domain::git_types::GitError;
 use crate::core::domain::models::FileFormat;
 use crate::core::domain::ports::GitRepository;
-use crate::core::domain::git_types::GitError;
 use crate::core::git::git_service::GitService;
-use crate::adapters::registry::get_driver_for;
 
 #[derive(Debug, Error)]
 pub enum AnalyzeError {

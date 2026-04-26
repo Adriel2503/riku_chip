@@ -3,9 +3,9 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::core::domain::driver::RikuDriver;
+use crate::core::domain::git_types::GitError;
 use crate::core::domain::models::{ChangeKind, ComponentDiff, DiffReport, Schematic};
 use crate::core::domain::ports::GitRepository;
-use crate::core::domain::git_types::GitError;
 use crate::core::git::git_service::GitService;
 
 // ─── Error ───────────────────────────────────────────────────────────────────
@@ -68,7 +68,9 @@ impl DiffView {
         let mut warnings = Vec::new();
 
         // ── Commit B (requerido) ──────────────────────────────────────────
-        let content_b = repo.get_blob(commit_b, file_path).map_err(DiffViewError::Git)?;
+        let content_b = repo
+            .get_blob(commit_b, file_path)
+            .map_err(DiffViewError::Git)?;
         let sch_b = parse_fn(&content_b);
         let svg_b = driver
             .render(&content_b, file_path)
@@ -83,22 +85,27 @@ impl DiffView {
             }
             Err(GitError::BlobNotFound { .. }) => (None, None, None),
             Err(GitError::LargeBlob { path, size }) => {
-                warnings.push(format!("{path} ({size} bytes) es demasiado grande; omitiendo."));
+                warnings.push(format!(
+                    "{path} ({size} bytes) es demasiado grande; omitiendo."
+                ));
                 (None, None, None)
             }
             Err(e) => return Err(DiffViewError::Git(e)),
         };
 
         // ── Diff semántico ────────────────────────────────────────────────
-        let driver_report = driver.diff(
-            content_a.as_deref().unwrap_or(&[]),
-            &content_b,
-            file_path,
-        );
+        let driver_report = driver.diff(content_a.as_deref().unwrap_or(&[]), &content_b, file_path);
         warnings.extend(driver_report.warnings);
         let report = driver_report_to_diff_report(&driver_report.changes);
 
-        Ok(Self { svg_a, svg_b, sch_a, sch_b, report, warnings })
+        Ok(Self {
+            svg_a,
+            svg_b,
+            sch_a,
+            sch_b,
+            report,
+            warnings,
+        })
     }
 }
 
@@ -132,17 +139,26 @@ pub fn driver_report_to_diff_report(
             .filter(|c| c.kind == ChangeKind::Removed && c.element.starts_with("net:"))
             .map(|c| c.element.trim_start_matches("net:").to_string())
             .collect(),
-        is_move_all: changes
-            .iter()
-            .any(|c| c.element == "layout" && c.cosmetic),
+        is_move_all: changes.iter().any(|c| c.element == "layout" && c.cosmetic),
     }
 }
 
 /// Cuenta cambios no cosméticos por tipo. Útil para el log --semantic.
-pub fn summarize_changes(changes: &[crate::core::domain::driver::DiffEntry]) -> (usize, usize, usize) {
-    let added = changes.iter().filter(|c| c.kind == ChangeKind::Added && !c.cosmetic).count();
-    let removed = changes.iter().filter(|c| c.kind == ChangeKind::Removed && !c.cosmetic).count();
-    let modified = changes.iter().filter(|c| c.kind == ChangeKind::Modified && !c.cosmetic).count();
+pub fn summarize_changes(
+    changes: &[crate::core::domain::driver::DiffEntry],
+) -> (usize, usize, usize) {
+    let added = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Added && !c.cosmetic)
+        .count();
+    let removed = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Removed && !c.cosmetic)
+        .count();
+    let modified = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Modified && !c.cosmetic)
+        .count();
     (added, removed, modified)
 }
 
@@ -156,7 +172,11 @@ mod tests {
     use crate::core::rendering::styles::annotation_style;
 
     fn make_report(changes: Vec<DiffEntry>) -> DriverDiffReport {
-        DriverDiffReport { file_type: FileFormat::Xschem, changes, ..Default::default() }
+        DriverDiffReport {
+            file_type: FileFormat::Xschem,
+            changes,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -198,9 +218,30 @@ mod tests {
     #[test]
     fn summarize_ignora_cosmeticos() {
         let report = make_report(vec![
-            DiffEntry { kind: ChangeKind::Added, element: "R1".to_string(), before: None, after: None, cosmetic: true, position_changed: false },
-            DiffEntry { kind: ChangeKind::Removed, element: "C1".to_string(), before: None, after: None, cosmetic: false, position_changed: false },
-            DiffEntry { kind: ChangeKind::Modified, element: "M1".to_string(), before: None, after: None, cosmetic: false, position_changed: false },
+            DiffEntry {
+                kind: ChangeKind::Added,
+                element: "R1".to_string(),
+                before: None,
+                after: None,
+                cosmetic: true,
+                position_changed: false,
+            },
+            DiffEntry {
+                kind: ChangeKind::Removed,
+                element: "C1".to_string(),
+                before: None,
+                after: None,
+                cosmetic: false,
+                position_changed: false,
+            },
+            DiffEntry {
+                kind: ChangeKind::Modified,
+                element: "M1".to_string(),
+                before: None,
+                after: None,
+                cosmetic: false,
+                position_changed: false,
+            },
         ]);
         assert_eq!(summarize_changes(&report.changes), (0, 1, 1));
     }

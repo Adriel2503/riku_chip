@@ -9,8 +9,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use super::{Cli, Commands};
 use super::commands;
+use super::{Cli, Commands};
 
 const LOGO: &str = r#"
     ██████╗ ██╗██╗  ██╗██╗   ██╗
@@ -58,7 +58,10 @@ impl ShellContext {
                 };
                 match p.canonicalize() {
                     Ok(p) => p,
-                    Err(_) => { println!("  [!] No existe: {t}"); return; }
+                    Err(_) => {
+                        println!("  [!] No existe: {t}");
+                        return;
+                    }
                 }
             }
             None => self.cwd.clone(),
@@ -66,7 +69,10 @@ impl ShellContext {
 
         let mut entries: Vec<_> = match std::fs::read_dir(&dir) {
             Ok(e) => e.filter_map(|e| e.ok()).collect(),
-            Err(_) => { println!("  [!] No se puede leer: {}", dir.display()); return; }
+            Err(_) => {
+                println!("  [!] No se puede leer: {}", dir.display());
+                return;
+            }
         };
         entries.sort_by_key(|e| e.file_name());
 
@@ -81,11 +87,15 @@ impl ShellContext {
         for entry in &entries {
             let path = entry.path();
             if path.extension().map(|e| e == "sch").unwrap_or(false) {
-                let in_git = self.repo.as_ref().map(|r| {
-                    r.workdir()
-                        .and_then(|wd| path.strip_prefix(wd).ok())
-                        .is_some()
-                }).unwrap_or(false);
+                let in_git = self
+                    .repo
+                    .as_ref()
+                    .map(|r| {
+                        r.workdir()
+                            .and_then(|wd| path.strip_prefix(wd).ok())
+                            .is_some()
+                    })
+                    .unwrap_or(false);
                 let tag = if in_git { "[git]" } else { "     " };
                 println!("  {tag}  {}", entry.file_name().to_string_lossy());
                 found = true;
@@ -98,7 +108,9 @@ impl ShellContext {
     }
 
     fn prompt(&self) -> String {
-        let dir = self.cwd.file_name()
+        let dir = self
+            .cwd
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| self.cwd.display().to_string());
         let repo_mark = if self.repo.is_some() { " (git)" } else { "" };
@@ -106,7 +118,8 @@ impl ShellContext {
     }
 
     fn repo_path(&self) -> PathBuf {
-        self.repo.as_ref()
+        self.repo
+            .as_ref()
             .and_then(|r| r.workdir())
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| self.cwd.clone())
@@ -129,8 +142,14 @@ fn shell_status_line(ctx: &ShellContext) -> String {
     let version = env!("CARGO_PKG_VERSION");
     let pdk = match (std::env::var("PDK_ROOT").ok(), std::env::var("PDK").ok()) {
         (Some(root), Some(pdk)) => {
-            let sym = std::path::Path::new(&root).join(&pdk).join("libs.tech/xschem");
-            if sym.exists() { format!("PDK: {pdk} [ok]") } else { "PDK: no detectado".to_string() }
+            let sym = std::path::Path::new(&root)
+                .join(&pdk)
+                .join("libs.tech/xschem");
+            if sym.exists() {
+                format!("PDK: {pdk} [ok]")
+            } else {
+                "PDK: no detectado".to_string()
+            }
         }
         _ => "PDK: no detectado".to_string(),
     };
@@ -158,12 +177,16 @@ pub(super) fn run_shell() -> Result<(), String> {
         let prompt = ctx.prompt();
         let line = match rl.readline(&prompt) {
             Ok(l) => l,
-            Err(rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof) => break,
+            Err(
+                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+            ) => break,
             Err(e) => return Err(e.to_string()),
         };
 
         let line = line.trim().to_string();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let _ = rl.add_history_entry(&line);
 
         let mut parts = line.splitn(2, ' ');
@@ -191,9 +214,15 @@ fn print_shell_help() {
     println!();
     println!("  Git:");
     println!("    status [--detail|--full] [--json [--compact]] [--paths PAT]");
-    println!("                                                    cambios semánticos en working tree");
-    println!("    log [archivo.sch] [--detail|--full] [--json [--compact]] [--paths PAT] [--branch REF]");
-    println!("                                                    historial con resumen semántico por commit");
+    println!(
+        "                                                    cambios semánticos en working tree"
+    );
+    println!(
+        "    log [archivo.sch] [--detail|--full] [--json [--compact]] [--paths PAT] [--branch REF]"
+    );
+    println!(
+        "                                                    historial con resumen semántico por commit"
+    );
     println!("    diff <commit_a> <commit_b> <archivo.sch>      diff semántico");
     println!("    diff ... --format visual                      diff visual en HTML");
     println!();
@@ -218,10 +247,26 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                     println!("  Ya estás en el shell.");
                     Ok(())
                 }
-                Some(Commands::Diff { commit_a, commit_b, file_path, repo: r, format }) => {
-                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                Some(Commands::Diff {
+                    commit_a,
+                    commit_b,
+                    file_path,
+                    repo: r,
+                    format,
+                }) => {
+                    let effective_repo = if r == PathBuf::from(".") {
+                        repo_path
+                    } else {
+                        r
+                    };
                     let effective_file = ctx.resolve_file(&file_path);
-                    commands::run_diff(effective_repo, &commit_a, &commit_b, &effective_file, format)
+                    commands::run_diff(
+                        effective_repo,
+                        &commit_a,
+                        &commit_b,
+                        &effective_file,
+                        format,
+                    )
                 }
                 Some(Commands::Log {
                     file_path,
@@ -235,7 +280,11 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                     paths,
                     branch,
                 }) => {
-                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                    let effective_repo = if r == PathBuf::from(".") {
+                        repo_path
+                    } else {
+                        r
+                    };
                     let effective_file = file_path.map(|f| ctx.resolve_file(&f));
                     commands::run_log(commands::LogArgs {
                         repo: effective_repo,
@@ -250,7 +299,11 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                     })
                 }
                 Some(Commands::Doctor { repo: r }) => {
-                    commands::run_doctor(if r == PathBuf::from(".") { repo_path } else { r })
+                    commands::run_doctor(if r == PathBuf::from(".") {
+                        repo_path
+                    } else {
+                        r
+                    })
                 }
                 Some(Commands::Status {
                     repo: r,
@@ -261,7 +314,11 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                     full,
                     paths,
                 }) => {
-                    let effective_repo = if r == PathBuf::from(".") { repo_path } else { r };
+                    let effective_repo = if r == PathBuf::from(".") {
+                        repo_path
+                    } else {
+                        r
+                    };
                     commands::run_status(commands::StatusArgs {
                         repo: effective_repo,
                         include_unknown,
@@ -275,7 +332,11 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                 }
                 Some(Commands::Open { file }) => {
                     let effective = file.map(|f| {
-                        if f.components().count() == 1 { ctx.cwd.join(&f) } else { f }
+                        if f.components().count() == 1 {
+                            ctx.cwd.join(&f)
+                        } else {
+                            f
+                        }
                     });
                     commands::run_gui(effective)
                 }
@@ -285,7 +346,13 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
             }
         }
         Err(e) => {
-            println!("  {}", e.to_string().lines().next().unwrap_or("comando no reconocido"));
+            println!(
+                "  {}",
+                e.to_string()
+                    .lines()
+                    .next()
+                    .unwrap_or("comando no reconocido")
+            );
         }
     }
 }

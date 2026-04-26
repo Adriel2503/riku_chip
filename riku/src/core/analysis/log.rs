@@ -10,15 +10,15 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::adapters::registry::get_driver_for;
+use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 use crate::core::domain::driver::DriverDiffReport;
-use crate::core::domain::ports::GitRepository;
 use crate::core::domain::git_types::{
     ChangeStatus, CommitInfo, CommitWithParents, GitError, LogQuery,
 };
+use crate::core::domain::ports::GitRepository;
 use crate::core::git::git_service::GitService;
 use crate::core::path_matcher::PathMatcher;
-use crate::adapters::registry::get_driver_for;
-use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 
 // ─── Errores ─────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,10 @@ pub struct EnvelopedLogReport<'a> {
 
 impl<'a> From<&'a LogReport> for EnvelopedLogReport<'a> {
     fn from(inner: &'a LogReport) -> Self {
-        Self { schema: LOG_SCHEMA, inner }
+        Self {
+            schema: LOG_SCHEMA,
+            inner,
+        }
     }
 }
 
@@ -155,7 +158,13 @@ fn build_log_commit<R: GitRepository + ?Sized>(
         diff_against_parent(repo, parent, &oid, opts, warnings)
     };
 
-    LogCommit { info: raw.info, parents: raw.parents, refs, is_merge, files }
+    LogCommit {
+        info: raw.info,
+        parents: raw.parents,
+        refs,
+        is_merge,
+        files,
+    }
 }
 
 fn diff_against_parent<R: GitRepository + ?Sized>(
@@ -229,8 +238,8 @@ fn diff_against_parent<R: GitRepository + ?Sized>(
 mod tests {
     use super::*;
     use crate::core::domain::driver::DriverDiffReport;
-    use crate::core::domain::models::FileFormat;
     use crate::core::domain::git_types::{BranchInfo, ChangedFile, WorkingChange};
+    use crate::core::domain::models::FileFormat;
 
     struct MockRepo {
         commits: Vec<CommitWithParents>,
@@ -252,11 +261,7 @@ mod tests {
         fn get_commits(&self, _file_path: Option<&str>) -> Result<Vec<CommitInfo>, GitError> {
             Ok(self.commits.iter().map(|c| c.info.clone()).collect())
         }
-        fn get_changed_files(
-            &self,
-            a: &str,
-            b: &str,
-        ) -> Result<Vec<ChangedFile>, GitError> {
+        fn get_changed_files(&self, a: &str, b: &str) -> Result<Vec<ChangedFile>, GitError> {
             Ok(self
                 .changed
                 .get(&(a.to_string(), b.to_string()))
@@ -275,9 +280,7 @@ mod tests {
         ) -> Result<Vec<CommitWithParents>, GitError> {
             Ok(self.commits.clone())
         }
-        fn refs_by_oid(
-            &self,
-        ) -> Result<std::collections::HashMap<String, Vec<String>>, GitError> {
+        fn refs_by_oid(&self) -> Result<std::collections::HashMap<String, Vec<String>>, GitError> {
             Ok(self.refs.clone())
         }
     }
@@ -325,7 +328,10 @@ mod tests {
     #[test]
     fn refs_se_anotan_por_oid() {
         let mut refs = std::collections::HashMap::new();
-        refs.insert("abc1234".to_string(), vec!["main".to_string(), "HEAD".to_string()]);
+        refs.insert(
+            "abc1234".to_string(),
+            vec!["main".to_string(), "HEAD".to_string()],
+        );
         let repo = MockRepo {
             commits: vec![ci("abc1234", &["parent"])],
             blobs: Default::default(),
@@ -356,7 +362,10 @@ mod tests {
 
     #[test]
     fn json_envelope_lleva_schema() {
-        let report = LogReport { commits: vec![], warnings: vec![] };
+        let report = LogReport {
+            commits: vec![],
+            warnings: vec![],
+        };
         let env = EnvelopedLogReport::from(&report);
         let v: serde_json::Value = serde_json::to_value(&env).unwrap();
         assert_eq!(v["schema"], "riku-log/v1");

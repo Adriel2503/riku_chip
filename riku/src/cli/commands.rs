@@ -10,16 +10,16 @@ use std::process::Command;
 
 use serde_json::json;
 
+use crate::adapters::registry::get_drivers;
 use crate::adapters::xschem_driver::XschemDriver;
 use crate::core::analysis::diff_view::DiffView;
 use crate::core::analysis::log;
 use crate::core::analysis::status::{self, StatusOptions};
 use crate::core::analysis::summary::DetailLevel;
 use crate::core::domain::models::ChangeKind;
-use crate::adapters::registry::get_drivers;
 
-use super::format;
 use super::OutputFormat;
+use super::format;
 
 // ─── Diff ────────────────────────────────────────────────────────────────────
 
@@ -53,8 +53,18 @@ fn present_text(view: &DiffView, file_path: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let semantic: Vec<_> = view.report.components.iter().filter(|c| !c.cosmetic).collect();
-    let cosmetic: Vec<_> = view.report.components.iter().filter(|c| c.cosmetic).collect();
+    let semantic: Vec<_> = view
+        .report
+        .components
+        .iter()
+        .filter(|c| !c.cosmetic)
+        .collect();
+    let cosmetic: Vec<_> = view
+        .report
+        .components
+        .iter()
+        .filter(|c| c.cosmetic)
+        .collect();
 
     println!("Archivo : {file_path}");
     println!("Cambios : {}", semantic.len());
@@ -65,10 +75,12 @@ fn present_text(view: &DiffView, file_path: &str) -> Result<(), String> {
 
     for c in &semantic {
         let is_rename = c.kind == ChangeKind::Modified && c.name.contains(" → ");
-        let marker = if is_rename { "r" } else {
+        let marker = if is_rename {
+            "r"
+        } else {
             match c.kind {
-                ChangeKind::Added    => "+",
-                ChangeKind::Removed  => "-",
+                ChangeKind::Added => "+",
+                ChangeKind::Removed => "-",
                 ChangeKind::Modified => "~",
             }
         };
@@ -110,7 +122,9 @@ fn present_text(view: &DiffView, file_path: &str) -> Result<(), String> {
         }
     }
     if !view.report.nets_removed.is_empty() {
-        if view.report.nets_added.is_empty() { println!(); }
+        if view.report.nets_added.is_empty() {
+            println!();
+        }
         for net in &view.report.nets_removed {
             println!("  - net:{net}");
         }
@@ -128,7 +142,10 @@ fn present_json(view: &DiffView, file_path: &str) -> Result<(), String> {
         "nets_removed": view.report.nets_removed,
         "is_move_all": view.report.is_move_all,
     });
-    println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+    );
     Ok(())
 }
 
@@ -188,8 +205,7 @@ pub(super) fn run_log(args: LogArgs) -> Result<(), String> {
         limit: Some(args.limit),
         start: args.branch,
     };
-    let report = log::analyze_with_options_path(&args.repo, &opts)
-        .map_err(|e| e.to_string())?;
+    let report = log::analyze_with_options_path(&args.repo, &opts).map_err(|e| e.to_string())?;
 
     if args.json {
         format::log_json::print(&report, !args.compact)?;
@@ -232,11 +248,16 @@ pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
 
     match (&pdk_root, &pdk_name) {
         (Some(root), Some(pdk)) => {
-            let sym = std::path::Path::new(root).join(pdk).join("libs.tech/xschem");
+            let sym = std::path::Path::new(root)
+                .join(pdk)
+                .join("libs.tech/xschem");
             if sym.exists() {
                 println!("  [ok]  $PDK_ROOT/$PDK → {}", sym.display());
             } else {
-                println!("  [!]  $PDK_ROOT/$PDK configurado pero ruta no encontrada: {}", sym.display());
+                println!(
+                    "  [!]  $PDK_ROOT/$PDK configurado pero ruta no encontrada: {}",
+                    sym.display()
+                );
             }
         }
         _ => println!("  [--]  $PDK_ROOT / $PDK: no configurados"),
@@ -244,27 +265,44 @@ pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
 
     match &tools {
         Some(t) => {
-            let devices = std::path::Path::new(t)
-                .join("xschem/share/xschem/xschem_library/devices");
+            let devices =
+                std::path::Path::new(t).join("xschem/share/xschem/xschem_library/devices");
             if devices.exists() {
                 println!("  [ok]  $TOOLS → {}", devices.display());
             } else {
-                println!("  [!]  $TOOLS configurado pero devices no encontrado: {}", devices.display());
+                println!(
+                    "  [!]  $TOOLS configurado pero devices no encontrado: {}",
+                    devices.display()
+                );
             }
         }
         None => println!("  [--]  $TOOLS: no configurado"),
     }
 
     let has_symbols = xschemrc.is_some()
-        || pdk_root.as_ref().zip(pdk_name.as_ref()).map(|(r, p)| {
-            std::path::Path::new(r).join(p).join("libs.tech/xschem").exists()
-        }).unwrap_or(false)
-        || tools.as_ref().map(|t| {
-            std::path::Path::new(t).join("xschem/share/xschem/xschem_library/devices").exists()
-        }).unwrap_or(false);
+        || pdk_root
+            .as_ref()
+            .zip(pdk_name.as_ref())
+            .map(|(r, p)| {
+                std::path::Path::new(r)
+                    .join(p)
+                    .join("libs.tech/xschem")
+                    .exists()
+            })
+            .unwrap_or(false)
+        || tools
+            .as_ref()
+            .map(|t| {
+                std::path::Path::new(t)
+                    .join("xschem/share/xschem/xschem_library/devices")
+                    .exists()
+            })
+            .unwrap_or(false);
 
     if !has_symbols {
-        println!("  [!]  Sin fuente de símbolos — los componentes se renderizarán como cajas vacías");
+        println!(
+            "  [!]  Sin fuente de símbolos — los componentes se renderizarán como cajas vacías"
+        );
     }
 
     println!("\n--- Drivers ---");
@@ -314,9 +352,11 @@ pub(super) fn run_status(args: StatusArgs) -> Result<StatusOutcome, String> {
         DetailLevel::Resumen
     };
 
-    let opts = StatusOptions { level, paths: args.paths };
-    let report = status::analyze_with_options_path(&args.repo, &opts)
-        .map_err(|e| e.to_string())?;
+    let opts = StatusOptions {
+        level,
+        paths: args.paths,
+    };
+    let report = status::analyze_with_options_path(&args.repo, &opts).map_err(|e| e.to_string())?;
 
     if args.json {
         format::status_json::print(&report, !args.compact)?;
@@ -334,15 +374,19 @@ pub(super) fn run_status(args: StatusArgs) -> Result<StatusOutcome, String> {
 // ─── GUI ─────────────────────────────────────────────────────────────────────
 
 pub(super) fn run_gui(file: Option<PathBuf>) -> Result<(), String> {
-    let args: Vec<std::ffi::OsString> =
-        file.into_iter().map(|p| p.into_os_string()).collect();
+    let args: Vec<std::ffi::OsString> = file.into_iter().map(|p| p.into_os_string()).collect();
     run_gui_with_args(args)
 }
 
 fn run_gui_with_args(args: Vec<std::ffi::OsString>) -> Result<(), String> {
     if let Some(bin) = locate_gui_binary() {
-        let status = Command::new(bin).args(&args).status().map_err(|e| e.to_string())?;
-        return if status.success() { Ok(()) } else {
+        let status = Command::new(bin)
+            .args(&args)
+            .status()
+            .map_err(|e| e.to_string())?;
+        return if status.success() {
+            Ok(())
+        } else {
             Err(format!("riku-gui finalizó con error: {status}"))
         };
     }
@@ -352,14 +396,17 @@ fn run_gui_with_args(args: Vec<std::ffi::OsString>) -> Result<(), String> {
         .ok_or_else(|| "No se pudo resolver la raíz del workspace.".to_string())?;
 
     let mut cargo = Command::new("cargo");
-    cargo.args(["run", "--package", "riku-gui", "--bin", "riku-gui"])
+    cargo
+        .args(["run", "--package", "riku-gui", "--bin", "riku-gui"])
         .current_dir(workspace_root);
     if !args.is_empty() {
         cargo.arg("--").args(&args);
     }
 
     let status = cargo.status().map_err(|e| e.to_string())?;
-    if status.success() { Ok(()) } else {
+    if status.success() {
+        Ok(())
+    } else {
         Err(format!("No se pudo iniciar riku-gui: {status}"))
     }
 }
@@ -369,19 +416,25 @@ fn locate_gui_binary() -> Option<PathBuf> {
 
     if let Ok(path) = std::env::var("RIKU_GUI_BIN") {
         let candidate = PathBuf::from(&path);
-        if candidate.exists() { return Some(candidate); }
+        if candidate.exists() {
+            return Some(candidate);
+        }
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             if let Ok(dir) = dir.canonicalize() {
                 let sibling = dir.join(&bin_name);
-                if sibling.exists() { return Some(sibling); }
+                if sibling.exists() {
+                    return Some(sibling);
+                }
                 for ancestor in [dir.parent(), dir.parent().and_then(|p| p.parent())] {
                     if let Some(p) = ancestor {
                         for profile in ["release", "debug"] {
                             let candidate = p.join(profile).join(&bin_name);
-                            if candidate.exists() { return Some(candidate); }
+                            if candidate.exists() {
+                                return Some(candidate);
+                            }
                         }
                     }
                 }
@@ -391,10 +444,13 @@ fn locate_gui_binary() -> Option<PathBuf> {
 
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     for profile in ["release", "debug"] {
-        let candidate = manifest_dir.parent()
+        let candidate = manifest_dir
+            .parent()
             .map(|p| p.join("target").join(profile).join(&bin_name));
         if let Some(c) = candidate {
-            if c.exists() { return Some(c); }
+            if c.exists() {
+                return Some(c);
+            }
         }
     }
 

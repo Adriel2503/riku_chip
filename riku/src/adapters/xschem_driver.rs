@@ -144,11 +144,16 @@ impl RikuDriver for XschemDriver {
         let text = std::str::from_utf8(content).ok()?;
         let mut opts = xschem_viewer::RenderOptions::dark().with_sym_paths_from_xschemrc();
         if let (Ok(root), Ok(pdk)) = (std::env::var("PDK_ROOT"), std::env::var("PDK")) {
-            let pdk_path = std::path::Path::new(&root).join(pdk).join("libs.tech/xschem");
+            let pdk_path = std::path::Path::new(&root)
+                .join(pdk)
+                .join("libs.tech/xschem");
             if pdk_path.exists() {
                 opts = opts.with_sym_path(pdk_path.to_string_lossy().to_string());
             }
         }
-        xschem_viewer::Renderer::new(opts).render(text).ok().map(|r| r.svg)
+        xschem_viewer::Renderer::new(opts)
+            .render(text)
+            .ok()
+            .map(|r| r.svg)
     }
 }

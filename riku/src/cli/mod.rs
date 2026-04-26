@@ -144,9 +144,13 @@ pub fn run() -> ExitCode {
 
     let result = match cli.command {
         None => shell::run_shell(),
-        Some(Commands::Diff { commit_a, commit_b, file_path, repo, format }) => {
-            commands::run_diff(repo, &commit_a, &commit_b, &file_path, format)
-        }
+        Some(Commands::Diff {
+            commit_a,
+            commit_b,
+            file_path,
+            repo,
+            format,
+        }) => commands::run_diff(repo, &commit_a, &commit_b, &file_path, format),
         Some(Commands::Log {
             file_path,
             repo,

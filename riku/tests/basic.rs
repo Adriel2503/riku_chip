@@ -4,12 +4,12 @@ use std::path::Path;
 use git2::{Repository, Signature};
 use serde_json::json;
 
+use riku::adapters::xschem_driver::parse;
 use riku::core::domain::git_types::{GitError, LARGE_BLOB_THRESHOLD};
-use riku::core::git::git_service::GitService;
 use riku::core::domain::models::{ChangeKind, FileFormat};
 use riku::core::domain::ports::GitRepository;
-use riku::adapters::xschem_driver::parse;
 use riku::core::format::detect_format;
+use riku::core::git::git_service::GitService;
 use xschem_viewer::semantic::diff;
 
 fn commit_file(repo: &Repository, rel_path: &str, content: &str, message: &str) -> git2::Oid {

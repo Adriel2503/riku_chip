@@ -13,11 +13,11 @@ use std::time::Instant;
 
 use git2::{Repository, Signature};
 
-use riku::core::git::git_service::GitService;
+use riku::adapters::xschem_driver::parse;
 use riku::core::domain::models::FileFormat;
 use riku::core::domain::ports::GitRepository;
-use riku::adapters::xschem_driver::parse;
 use riku::core::format::detect_format;
+use riku::core::git::git_service::GitService;
 use xschem_viewer::semantic::diff as semantic_diff_inner;
 
 /// Shim local: antes `semantic_diff` tomaba bytes. Ahora la librería exige
