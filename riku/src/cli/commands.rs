@@ -7,7 +7,6 @@
 
 use std::path::PathBuf;
 
-use crate::adapters::registry::get_drivers;
 use crate::adapters::xschem_driver::XschemDriver;
 use crate::core::analysis::diff_view::DiffView;
 use crate::core::analysis::log;
@@ -101,111 +100,6 @@ pub(super) fn run_log(args: LogArgs) -> Result<(), String> {
     } else {
         format::log_text::print(&report, level);
     }
-    Ok(())
-}
-
-// ─── Doctor ──────────────────────────────────────────────────────────────────
-
-pub(super) fn run_doctor(repo: PathBuf) -> Result<(), String> {
-    println!("\nRiku Doctor — Diagnóstico del Entorno\n");
-    #[allow(unused_mut)]
-    let mut any_error = false;
-
-    println!("--- Repositorio Git ---");
-    match git2::Repository::discover(&repo) {
-        Ok(r) => println!("  [ok]  {}", r.workdir().unwrap_or(r.path()).display()),
-        Err(_) => println!("  [!]  No detectado — diff/log no funcionarán"),
-    }
-
-    println!("\n--- PDK ---");
-    let pdk_root = std::env::var("PDK_ROOT").ok();
-    let pdk_name = std::env::var("PDK").ok();
-    let tools = std::env::var("TOOLS").ok();
-
-    let xschemrc_local = std::path::PathBuf::from(".xschemrc");
-    let xschemrc_home = dirs::home_dir().map(|h| h.join(".xschemrc"));
-    let xschemrc = if xschemrc_local.exists() {
-        Some(xschemrc_local)
-    } else {
-        xschemrc_home.filter(|p| p.exists())
-    };
-
-    match &xschemrc {
-        Some(p) => println!("  [ok]  .xschemrc: {}", p.display()),
-        None => println!("  [--]  .xschemrc: no encontrado"),
-    }
-
-    match (&pdk_root, &pdk_name) {
-        (Some(root), Some(pdk)) => {
-            let sym = std::path::Path::new(root)
-                .join(pdk)
-                .join("libs.tech/xschem");
-            if sym.exists() {
-                println!("  [ok]  $PDK_ROOT/$PDK → {}", sym.display());
-            } else {
-                println!(
-                    "  [!]  $PDK_ROOT/$PDK configurado pero ruta no encontrada: {}",
-                    sym.display()
-                );
-            }
-        }
-        _ => println!("  [--]  $PDK_ROOT / $PDK: no configurados"),
-    }
-
-    match &tools {
-        Some(t) => {
-            let devices =
-                std::path::Path::new(t).join("xschem/share/xschem/xschem_library/devices");
-            if devices.exists() {
-                println!("  [ok]  $TOOLS → {}", devices.display());
-            } else {
-                println!(
-                    "  [!]  $TOOLS configurado pero devices no encontrado: {}",
-                    devices.display()
-                );
-            }
-        }
-        None => println!("  [--]  $TOOLS: no configurado"),
-    }
-
-    let has_symbols = xschemrc.is_some()
-        || pdk_root
-            .as_ref()
-            .zip(pdk_name.as_ref())
-            .map(|(r, p)| {
-                std::path::Path::new(r)
-                    .join(p)
-                    .join("libs.tech/xschem")
-                    .exists()
-            })
-            .unwrap_or(false)
-        || tools
-            .as_ref()
-            .map(|t| {
-                std::path::Path::new(t)
-                    .join("xschem/share/xschem/xschem_library/devices")
-                    .exists()
-            })
-            .unwrap_or(false);
-
-    if !has_symbols {
-        println!(
-            "  [!]  Sin fuente de símbolos — los componentes se renderizarán como cajas vacías"
-        );
-    }
-
-    println!("\n--- Drivers ---");
-    for driver in get_drivers() {
-        let info = driver.info();
-        let status = if info.available { "[ok]" } else { "[x]" };
-        println!("  {status}  {:10} {}", info.name, info.version);
-    }
-
-    println!();
-    if any_error {
-        return Err("Se detectaron problemas críticos en el entorno.".to_string());
-    }
-    println!("Entorno listo.\n");
     Ok(())
 }
 

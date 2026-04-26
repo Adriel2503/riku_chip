@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use super::commands;
+use super::doctor;
 use super::gui;
 use super::{Cli, Commands};
 
@@ -298,7 +299,7 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                         branch,
                     })
                 }
-                Some(Commands::Doctor { repo: r }) => commands::run_doctor(ctx.resolve_repo(r)),
+                Some(Commands::Doctor { repo: r }) => doctor::run(ctx.resolve_repo(r)),
                 Some(Commands::Status {
                     repo: r,
                     include_unknown,

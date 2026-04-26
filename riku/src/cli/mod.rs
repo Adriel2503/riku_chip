@@ -13,6 +13,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod commands;
+mod doctor;
 mod format;
 mod gui;
 mod shell;
@@ -174,7 +175,7 @@ pub fn run() -> ExitCode {
             paths,
             branch,
         }),
-        Some(Commands::Doctor { repo }) => commands::run_doctor(repo),
+        Some(Commands::Doctor { repo }) => doctor::run(repo),
         Some(Commands::Status { .. }) => unreachable!(),
         Some(Commands::Open { file }) => gui::run(file),
     };
