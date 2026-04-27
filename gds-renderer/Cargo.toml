@@ -7,4 +7,4 @@ license = "MIT"
 publish = false
 
 [dependencies]
-#gdstk-rs = { path = "../gdstk/rust" }
+#gdstk-rs = { path = "../external/gdstk/rust" }

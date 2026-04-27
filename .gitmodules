@@ -1,3 +1,6 @@
 [submodule "external/xschem-viewer-rust"]
 	path = external/xschem-viewer-rust
 	url = https://github.com/carloscl03/xschem-viewer-rust.git
+[submodule "external/gdstk"]
+	path = external/gdstk
+	url = https://github.com/Adriel2503/gdstk_rust
