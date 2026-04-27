@@ -26,6 +26,7 @@ pub enum FileFormat {
     Qucs,
     #[serde(rename = "kicad_legacy")]
     KicadLegacy,
+    Gds,
     Unknown,
 }
 
@@ -41,6 +42,7 @@ impl fmt::Display for FileFormat {
             Self::Xschem => write!(f, "xschem"),
             Self::Qucs => write!(f, "qucs"),
             Self::KicadLegacy => write!(f, "kicad_legacy"),
+            Self::Gds => write!(f, "gds"),
             Self::Unknown => write!(f, "unknown"),
         }
     }
@@ -50,12 +52,14 @@ impl fmt::Display for FileFormat {
 #[serde(rename_all = "lowercase")]
 pub enum DriverKind {
     Xschem,
+    Gds,
 }
 
 impl fmt::Display for DriverKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Xschem => write!(f, "xschem"),
+            Self::Gds => write!(f, "gds"),
         }
     }
 }

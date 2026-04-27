@@ -3,12 +3,7 @@ use gdstk_rs::{BoundingBox, GdsTag, Point2D};
 use crate::style::{Color, LayerCatalog};
 use crate::viewport::Viewport;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct OwnedPolygon {
-    pub layer: u32,
-    pub datatype: u32,
-    pub points: Vec<Point2D>,
-}
+pub use gdstk_rs::OwnedPolygon;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrawCommand {

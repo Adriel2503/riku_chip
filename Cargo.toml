@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
-    # "gds-renderer",            # depende de gdstk-rs; descomentar al activar GDS
-    # "external/gdstk/rust",     # binding gdstk-rs (submódulo)
+    "gds-renderer",
+    "external/gdstk/rust",
     "riku-gui",
     "viewer-core",
 ]
