@@ -10,8 +10,9 @@
 //! Los detalles por archivo se incluyen en niveles `Detalle` y `Completo`,
 //! reusando los mismos formateadores que `status` para consistencia.
 
+use super::common::{format_counts, print_detail};
 use crate::core::analysis::log::{LogCommit, LogReport};
-use crate::core::analysis::summary::{DetailEntry, DetailLevel, FileSummary, label_for};
+use crate::core::analysis::summary::{DetailLevel, FileSummary};
 
 pub fn print(report: &LogReport, level: DetailLevel) {
     for w in &report.warnings {
@@ -118,41 +119,11 @@ fn days_since_epoch_to_ymd(days: u64) -> (i32, u32, u32) {
 }
 
 fn print_file_line(f: &FileSummary, level: DetailLevel) {
-    println!("          {}  {}", f.path, format_counts(f));
+    println!("          {}  {}", f.path, format_counts(f, true));
     if matches!(level, DetailLevel::Detalle | DetailLevel::Completo) {
         for d in &f.details {
-            print_detail(d);
+            print_detail(d, "              ");
         }
-    }
-}
-
-fn format_counts(f: &FileSummary) -> String {
-    use crate::core::analysis::summary::SummaryCategory;
-    if matches!(f.category, SummaryCategory::Cosmetic) {
-        return "(solo cambios cosméticos)".to_string();
-    }
-    if f.counts.is_empty() {
-        return "(cambios sin detalle)".to_string();
-    }
-    let mut parts = Vec::with_capacity(f.counts.len());
-    for (key, count) in &f.counts {
-        let label = label_for(key, *count).unwrap_or_else(|| key.clone());
-        parts.push(format!("{count} {label}"));
-    }
-    parts.join(", ")
-}
-
-fn print_detail(d: &DetailEntry) {
-    use crate::core::analysis::summary::DetailKind::*;
-    let marker = match d.kind {
-        ComponentAdded | NetAdded => "+",
-        ComponentRemoved | NetRemoved => "-",
-        ComponentRenamed => "r",
-        ComponentModified | NetModified | Other => "~",
-    };
-    println!("              {marker} {}", d.element);
-    for (k, v) in &d.params {
-        println!("                  {k}: {v}");
     }
 }
 

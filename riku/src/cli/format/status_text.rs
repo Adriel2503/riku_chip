@@ -5,10 +5,9 @@
 //! - `Detalle`: añade entradas por componente/net cambiada.
 //! - `Completo`: imprime el `DriverDiffReport` íntegro tras el resumen.
 
+use super::common::{format_counts, print_detail};
 use crate::core::analysis::status::StatusReport;
-use crate::core::analysis::summary::{
-    DetailEntry, DetailLevel, FileSummary, SummaryCategory, label_for,
-};
+use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::models::ChangeKind;
 
@@ -117,40 +116,14 @@ fn print_categorized(report: &StatusReport, level: DetailLevel, include_unknown:
 }
 
 fn print_file_entry(f: &FileSummary, level: DetailLevel) {
-    println!("  {}    {}", f.path, format_counts(f));
+    println!("  {}    {}", f.path, format_counts(f, false));
     if matches!(level, DetailLevel::Detalle | DetailLevel::Completo) {
         for d in &f.details {
-            print_detail_entry(d);
+            print_detail(d, "      ");
         }
     }
     if let (DetailLevel::Completo, Some(rep)) = (level, &f.full_report) {
         print_full_report(rep);
-    }
-}
-
-fn format_counts(f: &FileSummary) -> String {
-    if f.counts.is_empty() {
-        return "(cambios sin detalle)".to_string();
-    }
-    let mut parts = Vec::with_capacity(f.counts.len());
-    for (key, count) in &f.counts {
-        let label = label_for(key, *count).unwrap_or_else(|| key.clone());
-        parts.push(format!("{count} {label}"));
-    }
-    parts.join(", ")
-}
-
-fn print_detail_entry(d: &DetailEntry) {
-    use crate::core::analysis::summary::DetailKind::*;
-    let marker = match d.kind {
-        ComponentAdded | NetAdded => "+",
-        ComponentRemoved | NetRemoved => "-",
-        ComponentRenamed => "r",
-        ComponentModified | NetModified | Other => "~",
-    };
-    println!("      {marker} {}", d.element);
-    for (k, v) in &d.params {
-        println!("          {k}: {v}");
     }
 }
 

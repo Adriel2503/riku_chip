@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use super::doctor::{PdkStatus, pdk_status};
 use super::{Cli, Commands};
 
 const LOGO: &str = r#"
@@ -149,18 +150,14 @@ impl ShellContext {
 
 fn shell_status_line(ctx: &ShellContext) -> String {
     let version = env!("CARGO_PKG_VERSION");
-    let pdk = match (std::env::var("PDK_ROOT").ok(), std::env::var("PDK").ok()) {
-        (Some(root), Some(pdk)) => {
-            let sym = std::path::Path::new(&root)
-                .join(&pdk)
-                .join("libs.tech/xschem");
-            if sym.exists() {
-                format!("PDK: {pdk} [ok]")
-            } else {
-                "PDK: no detectado".to_string()
-            }
+    let pdk = match pdk_status() {
+        PdkStatus::Found(_) => format!(
+            "PDK: {} [ok]",
+            std::env::var("PDK").unwrap_or_default()
+        ),
+        PdkStatus::Misconfigured(_) | PdkStatus::NotConfigured => {
+            "PDK: no detectado".to_string()
         }
-        _ => "PDK: no detectado".to_string(),
     };
     let repo_str = git2::Repository::discover(&ctx.cwd)
         .ok()
@@ -254,7 +251,7 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
                 println!("  Ya estás en el shell.");
                 return;
             };
-            cmd.resolve_paths(ctx);
+            resolve_for_shell(&mut cmd, ctx);
             // `Outcome::Status*` se descarta a propósito — el shell no usa
             // exit codes; cambios pendientes se reflejan en la salida del
             // propio comando.
@@ -276,37 +273,38 @@ fn dispatch_shell_command(ctx: &mut ShellContext, line: &str) {
 
 // ─── Shell-specific path resolution ─────────────────────────────────────────
 
-impl Commands {
-    /// Aplica las resoluciones del shell antes de ejecutar: `--repo .` se
-    /// reemplaza por el repo activo del REPL, y los path relativos se rebasan
-    /// al cwd del shell. No toca flags ni semántica del comando.
-    fn resolve_paths(&mut self, ctx: &ShellContext) {
-        match self {
-            Commands::Diff {
-                repo, file_path, ..
-            } => {
-                *repo = ctx.resolve_repo(std::mem::take(repo));
-                *file_path = ctx.resolve_file(file_path);
+/// Aplica las resoluciones del shell antes de ejecutar: `--repo .` se
+/// reemplaza por el repo activo del REPL, y los path relativos se rebasan
+/// al cwd del shell. No toca flags ni semántica del comando.
+///
+/// Vive como función libre (y no como `impl Commands`) para no contaminar el
+/// tipo del parser con conocimiento del REPL.
+fn resolve_for_shell(cmd: &mut Commands, ctx: &ShellContext) {
+    match cmd {
+        Commands::Diff {
+            repo, file_path, ..
+        } => {
+            *repo = ctx.resolve_repo(std::mem::take(repo));
+            *file_path = ctx.resolve_file(file_path);
+        }
+        Commands::Log {
+            repo, file_path, ..
+        } => {
+            *repo = ctx.resolve_repo(std::mem::take(repo));
+            if let Some(f) = file_path.as_mut() {
+                *f = ctx.resolve_file(f);
             }
-            Commands::Log {
-                repo, file_path, ..
-            } => {
-                *repo = ctx.resolve_repo(std::mem::take(repo));
-                if let Some(f) = file_path.as_mut() {
-                    *f = ctx.resolve_file(f);
-                }
-            }
-            Commands::Doctor { repo } => {
-                *repo = ctx.resolve_repo(std::mem::take(repo));
-            }
-            Commands::Status { repo, .. } => {
-                *repo = ctx.resolve_repo(std::mem::take(repo));
-            }
-            Commands::Open { file } => {
-                if let Some(f) = file.as_mut() {
-                    if f.components().count() == 1 {
-                        *f = ctx.cwd.join(&*f);
-                    }
+        }
+        Commands::Doctor { repo } => {
+            *repo = ctx.resolve_repo(std::mem::take(repo));
+        }
+        Commands::Status { repo, .. } => {
+            *repo = ctx.resolve_repo(std::mem::take(repo));
+        }
+        Commands::Open { file } => {
+            if let Some(f) = file.as_mut() {
+                if f.components().count() == 1 {
+                    *f = ctx.cwd.join(&*f);
                 }
             }
         }

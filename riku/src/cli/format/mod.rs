@@ -3,6 +3,7 @@
 //! La lógica de dominio nunca conoce el formato. Los comandos eligen el
 //! formateador según los flags del CLI.
 
+mod common;
 pub mod diff_json;
 pub mod diff_text;
 pub mod log_json;

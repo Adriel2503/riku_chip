@@ -15,6 +15,7 @@ use thiserror::Error;
 use crate::adapters::registry::get_driver_for;
 use crate::core::analysis::blob_io;
 use crate::core::analysis::envelope::Envelope;
+use crate::core::analysis::pipeline;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
 use crate::core::domain::git_types::{BranchInfo, ChangeStatus, GitError, WorkingChange};
 use crate::core::domain::ports::{GitRepository, RepoRoot};
@@ -157,8 +158,7 @@ fn summarize_change<R: GitRepository + ?Sized>(
         },
     };
 
-    let report = driver.diff(&content_before, &content_after, &change.path);
-    FileSummary::from_report_with(&report, &change.path, level)
+    pipeline::summarize(&*driver, &content_before, &content_after, &change.path, level)
 }
 
 fn read_workdir(workdir: Option<&Path>, rel_path: &str) -> io::Result<Vec<u8>> {

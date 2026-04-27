@@ -77,7 +77,7 @@ fn locate_xschemrc() -> Option<PathBuf> {
         .filter(|p| p.exists())
 }
 
-fn pdk_status() -> PdkStatus {
+pub(super) fn pdk_status() -> PdkStatus {
     let (Some(root), Some(name)) = (std::env::var("PDK_ROOT").ok(), std::env::var("PDK").ok())
     else {
         return PdkStatus::NotConfigured;

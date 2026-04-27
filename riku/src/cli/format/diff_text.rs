@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::common::marker_for_change;
 use crate::core::analysis::diff_view::DiffView;
 use crate::core::domain::models::{ChangeKind, ComponentDiff};
 
@@ -45,7 +46,7 @@ fn print_header(file_path: &str, semantic: usize, cosmetic: usize) {
 }
 
 fn print_component(c: &ComponentDiff) {
-    println!("  {} {}", marker_for(c), c.name);
+    println!("  {} {}", marker_for_change(&c.kind, &c.name), c.name);
 
     if let (Some(before), Some(after)) = (&c.before, &c.after) {
         print_param_diff(before, after);
@@ -55,18 +56,6 @@ fn print_component(c: &ComponentDiff) {
                 println!("      símbolo: {sym}");
             }
         }
-    }
-}
-
-fn marker_for(c: &ComponentDiff) -> &'static str {
-    let is_rename = c.kind == ChangeKind::Modified && c.name.contains(" → ");
-    if is_rename {
-        return "r";
-    }
-    match c.kind {
-        ChangeKind::Added => "+",
-        ChangeKind::Removed => "-",
-        ChangeKind::Modified => "~",
     }
 }
 

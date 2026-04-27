@@ -13,8 +13,8 @@ use thiserror::Error;
 use crate::adapters::registry::get_driver_for;
 use crate::core::analysis::blob_io;
 use crate::core::analysis::envelope::Envelope;
+use crate::core::analysis::pipeline;
 use crate::core::analysis::summary::{DetailLevel, FileSummary, SummaryCategory};
-use crate::core::domain::driver::DriverDiffReport;
 use crate::core::domain::git_types::{
     ChangeStatus, CommitInfo, CommitWithParents, GitError, LogQuery,
 };
@@ -196,8 +196,7 @@ fn diff_against_parent<R: GitRepository + ?Sized>(
             blob_io::read_blob_silent(repo, commit, &cf.path, warnings)
         };
 
-        let report: DriverDiffReport = driver.diff(&content_before, &content_after, &cf.path);
-        let summary = FileSummary::from_report_with(&report, &cf.path, opts.level);
+        let summary = pipeline::summarize(&*driver, &content_before, &content_after, &cf.path, opts.level);
         // Saltamos archivos sin cambio semántico ni cosmético detectado, para
         // no inflar el log con ruido de driver.
         if matches!(summary.category, SummaryCategory::Unchanged) {
